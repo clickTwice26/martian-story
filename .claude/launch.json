@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "jezero",
+      "runtimeExecutable": "./server/jezero-server",
+      "runtimeArgs": ["-dir", ".", "-port", "8123"],
+      "port": 8123
+    }
+  ]
+}

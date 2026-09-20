@@ -1,0 +1,12 @@
+# Compiled Go server. Built from source with one command; no reason to ship a
+# 8 MB platform-specific binary in the tree.
+/server/jezero-server
+/server/*.exe
+
+# Extractor scratch output. The baked tiles that the game actually uses are
+# committed under data/; this is the tool's own working directory.
+/tools/out/
+
+.DS_Store
+*.swp
+node_modules/

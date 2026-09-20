@@ -1,0 +1,50 @@
+{
+  "jezero_base": {
+    "name": "jezero_base",
+    "width": 8192,
+    "height": 4096,
+    "metresPerPixel": 2.0,
+    "widthMetres": 16384.0,
+    "heightMetres": 8192.0,
+    "elevMin": -2646.475830078125,
+    "elevMax": -1639.891845703125,
+    "elevEncoding": "uint16 linear; metres = elevMin + v/65535*(elevMax-elevMin)",
+    "verticalPrecisionMetres": 0.015359487058442053,
+    "projected": {
+      "xLeft": 4577366.0,
+      "yTop": 1098426.0
+    },
+    "lonLeft": 77.22293307697142,
+    "lonRight": 77.49934106696679,
+    "latTop": 18.531111011880068,
+    "latBottom": 18.39290701688239,
+    "marsRadius": 3396190.0,
+    "noDataFilled": 3117771,
+    "source": "USGS Mars 2020 TRN HiRISE DTM Mosaic (JEZ_hirise_soc_006, 1 m/px)",
+    "sourceUrl": "https://www.usgs.gov/data/mars-2020-terrain-relative-navigation-hirise-dtm-mosaic"
+  },
+  "jezero_detail": {
+    "name": "jezero_detail",
+    "width": 2048,
+    "height": 2048,
+    "metresPerPixel": 1.0,
+    "widthMetres": 2048.0,
+    "heightMetres": 2048.0,
+    "elevMin": -2608.58642578125,
+    "elevMax": -2544.730224609375,
+    "elevEncoding": "uint16 linear; metres = elevMin + v/65535*(elevMax-elevMin)",
+    "verticalPrecisionMetres": 0.0009743831719214923,
+    "projected": {
+      "xLeft": 4589854.0,
+      "yTop": 1094324.0
+    },
+    "lonLeft": 77.43361319043957,
+    "lonRight": 77.468164189189,
+    "latTop": 18.461907790752075,
+    "latBottom": 18.42735679200266,
+    "marsRadius": 3396190.0,
+    "noDataFilled": 0,
+    "source": "USGS Mars 2020 TRN HiRISE DTM Mosaic (JEZ_hirise_soc_006, 1 m/px)",
+    "sourceUrl": "https://www.usgs.gov/data/mars-2020-terrain-relative-navigation-hirise-dtm-mosaic"
+  }
+}

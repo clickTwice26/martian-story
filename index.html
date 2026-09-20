@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no" />
+<title>JEZERO — Mars Surface Exploration</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{width:100%;height:100%;overflow:hidden;background:#140c08;color:#f0e2d2;
+    font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace}
+  #app{position:fixed;inset:0}
+  #app canvas{display:block}
+
+  /* ------------------------------------------------------------- loading */
+  #loading{position:fixed;inset:0;z-index:40;display:flex;flex-direction:column;
+    align-items:center;justify-content:center;gap:22px;
+    background:radial-gradient(ellipse at 50% 45%,#3a2015,#120a07 70%);
+    transition:opacity .5s ease}
+  #loading.hidden{opacity:0;pointer-events:none}
+  #loading h1{font-size:clamp(30px,6vw,58px);letter-spacing:.16em;font-weight:600;color:#e9b98a}
+  #loading h2{font-size:12px;letter-spacing:.34em;color:#9a7c66;font-weight:400}
+  #loadTrack{width:min(460px,72vw);height:3px;background:#3a2519;overflow:hidden}
+  #loadBar{height:100%;width:100%;background:#e0a06a;transform:scaleX(0);
+    transform-origin:left center;transition:transform .2s ease}
+  #loadStatus{font-size:12px;color:#b5947c;letter-spacing:.06em;min-height:1.2em}
+  #credit{position:absolute;bottom:26px;font-size:10.5px;color:#7d6353;
+    letter-spacing:.05em;text-align:center;line-height:1.8;max-width:min(620px,86vw)}
+  #credit a{color:#b08560}
+
+  /* -------------------------------------------------------------- start */
+  #startOverlay{position:fixed;inset:0;z-index:30;display:flex;align-items:center;
+    justify-content:center;background:rgba(14,8,5,.52);backdrop-filter:blur(2px);
+    transition:opacity .25s ease}
+  #startOverlay.hidden{opacity:0;pointer-events:none}
+  .start-card{display:flex;flex-direction:column;align-items:center;gap:16px;text-align:center;
+    padding:0 24px}
+  .start-card p{font-size:11px;line-height:1.75;color:#b5947c;letter-spacing:.04em;max-width:46ch}
+  .start-card p.keys{color:#8e7462;font-size:10px;letter-spacing:.1em}
+  .start-card b{color:#ffd45e}
+  #startBtn{padding:15px 34px;border:1px solid #c08a5e;background:rgba(20,12,8,.72);
+    color:#f2ddc6;font-family:inherit;font-size:13px;letter-spacing:.24em;cursor:pointer;
+    transition:background .18s ease,border-color .18s ease}
+  #startBtn:hover{background:rgba(60,34,20,.85);border-color:#e0a870}
+
+  /* ---------------------------------------------------------------- HUD */
+  #hud{position:fixed;inset:0;z-index:10;pointer-events:none;
+    font-size:11px;letter-spacing:.05em}
+  .panel{position:absolute;background:linear-gradient(180deg,rgba(18,11,7,.80),rgba(18,11,7,.62));
+    border:1px solid rgba(200,140,95,.26);padding:11px 14px;
+    backdrop-filter:blur(3px)}
+  .panel h3{font-size:9px;letter-spacing:.26em;color:#c08a5e;font-weight:600;
+    margin-bottom:8px;border-bottom:1px solid rgba(200,140,95,.20);padding-bottom:5px}
+  .row{display:flex;justify-content:space-between;gap:20px;line-height:1.85;white-space:nowrap}
+  .row span:first-child{color:#9a7c66}
+  .row span:last-child{color:#f2ddc6}
+  #navPanel{top:18px;left:18px;min-width:228px}
+  #perfPanel{top:18px;right:18px;min-width:176px}
+  #solPanel{bottom:52px;left:18px;min-width:228px;max-width:44vw}
+  #solPanel .big{font-size:15px;color:#ffd27a;letter-spacing:.10em;margin-bottom:3px}
+  #keysPanel{bottom:52px;right:18px;color:#8e7462;line-height:1.75;text-align:right;max-width:min(268px,40vw);font-size:10px;padding:8px 10px}
+  #keysPanel b{color:#d9a97e;font-weight:600}
+  /* input state + transient notices */
+  #notice{position:absolute;left:50%;top:92px;transform:translateX(-50%);
+    background:rgba(34,16,9,.94);border:1px solid rgba(220,150,90,.5);color:#ffd6a8;
+    padding:9px 17px;font-size:11px;letter-spacing:.05em;opacity:0;
+    transition:opacity .25s ease;pointer-events:none;max-width:72vw;text-align:center}
+  #notice.show{opacity:1}
+  .badge{position:absolute;left:50%;bottom:34px;transform:translateX(-50%);
+    font-size:9px;letter-spacing:.2em;padding:5px 12px;border:1px solid;
+    pointer-events:none;transition:opacity .25s ease}
+  .badge.none{color:#ffd27a;border-color:rgba(255,210,122,.55);background:rgba(44,22,9,.8)}
+  .badge.drag{color:#9fd0ff;border-color:rgba(159,208,255,.5);background:rgba(10,22,36,.8)}
+  .badge.locked{opacity:0}
+
+  #companionSay{position:absolute;transform:translate(-50%,-100%);
+    background:rgba(16,24,34,.94);border:1px solid rgba(120,190,255,.45);
+    color:#cfe6ff;padding:9px 14px;font-size:11px;line-height:1.6;letter-spacing:.03em;
+    max-width:min(380px,52vw);text-align:left;pointer-events:none;
+    opacity:0;transition:opacity .2s ease;border-radius:2px;
+    box-shadow:0 8px 28px rgba(0,0,0,.55)}
+  #companionSay.show{opacity:1}
+  #companionSay:after{content:"";position:absolute;left:50%;bottom:-7px;
+    width:0;height:0;margin-left:-6px;border-left:6px solid transparent;
+    border-right:6px solid transparent;border-top:7px solid rgba(120,190,255,.45)}
+
+  #crosshair{position:absolute;left:50%;top:50%;width:13px;height:13px;
+    transform:translate(-50%,-50%);opacity:.5}
+  #crosshair:before,#crosshair:after{content:"";position:absolute;background:#f0d8c0}
+  #crosshair:before{left:50%;top:0;width:1px;height:100%;transform:translateX(-50%)}
+  #crosshair:after{top:50%;left:0;height:1px;width:100%;transform:translateY(-50%)}
+  /* ----------------------------------------------------- mars clock panel */
+  #marsPanel{top:18px;left:50%;transform:translateX(-50%);min-width:250px;text-align:center}
+  #marsPanel .solbig{font-size:19px;color:#ffd27a;letter-spacing:.10em;margin-bottom:2px}
+  #marsPanel .lmst{font-size:26px;color:#f2ddc6;letter-spacing:.06em;line-height:1.1;
+    font-variant-numeric:tabular-nums}
+  #marsPanel .sub{font-size:9.5px;color:#9a7c66;letter-spacing:.12em;margin-top:4px}
+
+  /* --------------------------------------------------------- settings menu */
+  #settings{position:fixed;inset:0;z-index:50;display:none;align-items:center;
+    justify-content:center;background:rgba(10,6,4,.78);backdrop-filter:blur(6px);
+    font-size:12px}
+  #settings.open{display:flex}
+  .set-panel{width:min(980px,94vw);height:min(660px,90vh);display:flex;flex-direction:column;
+    background:linear-gradient(180deg,#1d1310,#140c09);border:1px solid rgba(200,140,95,.34);
+    box-shadow:0 30px 90px rgba(0,0,0,.7)}
+  .set-head{display:flex;align-items:center;gap:16px;padding:14px 18px;
+    border-bottom:1px solid rgba(200,140,95,.22)}
+  .set-head h2{font-size:14px;letter-spacing:.3em;color:#e9b98a;font-weight:600}
+  .set-presets{margin-left:auto;display:flex;align-items:center;gap:6px}
+  .set-presets span{font-size:9px;letter-spacing:.24em;color:#8e7462;margin-right:4px}
+  .set-presets button,.set-close{background:rgba(0,0,0,.35);color:#d6c2ab;cursor:pointer;
+    border:1px solid rgba(200,140,95,.3);padding:6px 11px;font-family:inherit;font-size:10px;
+    letter-spacing:.12em;transition:all .15s}
+  .set-presets button:hover,.set-close:hover{background:rgba(200,140,95,.22);color:#fff}
+  .set-reset{opacity:.65}
+  .set-close{padding:6px 10px;font-size:12px}
+  .set-body{flex:1;display:flex;min-height:0}
+  .set-tabs{width:168px;flex:0 0 auto;border-right:1px solid rgba(200,140,95,.18);
+    padding:12px 0;display:flex;flex-direction:column}
+  .set-tabs button{background:none;border:none;color:#8e7462;text-align:left;
+    padding:11px 20px;font-family:inherit;font-size:11px;letter-spacing:.18em;cursor:pointer;
+    border-left:2px solid transparent;transition:all .14s}
+  .set-tabs button:hover{color:#d6c2ab}
+  .set-tabs button.on{color:#ffd27a;border-left-color:#c8641e;background:rgba(200,100,30,.09)}
+  .set-pages{flex:1;overflow-y:auto;padding:6px 20px 20px}
+  .set-page{display:none}
+  .set-page.on{display:block}
+  .set-row{display:flex;align-items:flex-start;gap:18px;padding:13px 0;
+    border-bottom:1px solid rgba(200,140,95,.10)}
+  .set-label{flex:1;min-width:0}
+  .set-label span{color:#e4d3bf;display:block;line-height:1.4}
+  .set-label em{display:block;color:#8a7160;font-style:normal;font-size:10px;
+    line-height:1.55;margin-top:4px;max-width:46ch}
+  .set-ctrl{flex:0 0 auto;display:flex;align-items:center;gap:10px;min-width:236px;
+    justify-content:flex-end}
+  .set-toggle{width:56px;padding:6px 0;background:rgba(0,0,0,.4);color:#8e7462;cursor:pointer;
+    border:1px solid rgba(200,140,95,.3);font-family:inherit;font-size:10px;letter-spacing:.14em}
+  .set-toggle.on{background:rgba(200,100,30,.3);color:#ffd27a;border-color:#c8641e}
+  .set-seg{display:flex;border:1px solid rgba(200,140,95,.28)}
+  .set-seg button{background:rgba(0,0,0,.3);border:none;color:#8e7462;cursor:pointer;
+    padding:6px 10px;font-family:inherit;font-size:10px;letter-spacing:.08em;
+    border-right:1px solid rgba(200,140,95,.18)}
+  .set-seg button:last-child{border-right:none}
+  .set-seg button.on{background:rgba(200,100,30,.32);color:#ffd27a}
+  .set-ctrl input[type=range]{width:176px;accent-color:#c8641e;cursor:pointer}
+  .set-val{width:56px;text-align:right;color:#ffd27a;font-variant-numeric:tabular-nums;font-size:11px}
+  .set-note{color:#8a7160;font-size:10.5px;line-height:1.75;padding:12px 0 4px;
+    border-bottom:1px solid rgba(200,140,95,.12);margin-bottom:4px}
+  .set-note b{color:#d9a97e}
+  .set-key{min-width:96px;padding:7px 10px;background:rgba(0,0,0,.4);color:#e4d3bf;
+    border:1px solid rgba(200,140,95,.3);font-family:inherit;font-size:10px;
+    letter-spacing:.1em;cursor:pointer;transition:all .14s}
+  .set-key:hover{border-color:#c8641e;color:#ffd27a}
+  .set-key.capturing{background:rgba(200,100,30,.4);color:#fff;border-color:#e0a870}
+  .set-foot{display:flex;justify-content:space-between;padding:10px 18px;
+    border-top:1px solid rgba(200,140,95,.22);color:#7d6353;font-size:10px;letter-spacing:.08em}
+
+  /* The HUD assumes a wide screen; below that, tighten it so the top row's
+     three panels cannot overlap. */
+  @media (max-width:1250px){
+    .panel{font-size:10px;padding:8px 11px}
+    .panel h3{font-size:8px;margin-bottom:6px}
+    #navPanel,#perfPanel{min-width:0}
+    #navPanel .row,#perfPanel .row{gap:12px;line-height:1.65}
+    #marsPanel{min-width:194px}
+    #marsPanel .lmst{font-size:20px}
+    #marsPanel .solbig{font-size:15px}
+    #marsPanel .sub{font-size:8px;letter-spacing:.06em}
+    #keysPanel{font-size:9px;max-width:min(230px,34vw)}
+    #solPanel .big{font-size:13px}
+  }
+  @media (max-width:880px){
+    #keysPanel{display:none}
+    #marsPanel{min-width:166px}
+    #marsPanel .sub{display:none}
+  }
+
+  /* Narrow panel: stack each row instead of squeezing the label to one word
+     per line against a fixed-width control column. */
+  @media (max-width:980px){
+    .set-panel{width:96vw;height:92vh}
+    .set-tabs{width:112px}
+    .set-tabs button{padding:9px 12px;font-size:10px;letter-spacing:.10em}
+    .set-pages{padding:4px 13px 16px}
+    .set-row{flex-direction:column;align-items:stretch;gap:9px;padding:11px 0}
+    .set-ctrl{min-width:0;justify-content:flex-start}
+    .set-label em{max-width:none}
+    .set-ctrl input[type=range]{flex:1;width:auto}
+    .set-head{flex-wrap:wrap;gap:9px;padding:10px 13px}
+    .set-head h2{font-size:12px;letter-spacing:.22em}
+    .set-presets button,.set-close{padding:5px 8px;font-size:9px}
+    .set-seg button{padding:6px 8px}
+  }
+
+  #srcNote{position:absolute;bottom:9px;left:50%;transform:translateX(-50%);width:100%;pointer-events:none;
+    color:#6f5949;font-size:9.5px;letter-spacing:.09em;text-align:center;line-height:1.7}
+</style>
+</head>
+<body>
+
+<div id="app"></div>
+
+<div id="hud">
+  <div class="panel" id="navPanel">
+    <h3>POSITION</h3>
+    <div class="row"><span>LON</span><span id="hudLon">—</span></div>
+    <div class="row"><span>LAT</span><span id="hudLat">—</span></div>
+    <div class="row"><span>ELEVATION</span><span id="hudElev">—</span></div>
+    <div class="row"><span>SLOPE</span><span id="hudSlope">—</span></div>
+    <div class="row"><span>SPEED</span><span id="hudSpeed">—</span></div>
+    <div class="row"><span>MODE</span><span id="hudMode">—</span></div>
+    <div class="row"><span>TERRAIN</span><span id="hudTerrain">—</span></div>
+  </div>
+
+  <div class="panel" id="marsPanel">
+    <div class="solbig" id="hudMarsSol">—</div>
+    <div class="lmst" id="hudLmst">--:--:--</div>
+    <div class="sub" id="hudMarsSub">—</div>
+  </div>
+
+  <div class="panel" id="perfPanel">
+    <h3>RENDER</h3>
+    <div class="row"><span>FPS</span><span id="hudFps">—</span></div>
+    <div class="row"><span>LOD NODES</span><span id="hudNodes">—</span></div>
+    <div class="row"><span>TRIANGLES</span><span id="hudTris">—</span></div>
+    <div class="row"><span>ROCKS</span><span id="hudRocks">—</span></div>
+    <div class="row"><span>GRAVITY</span><span>3.721 m/s²</span></div>
+    <div class="row"><span>SENSITIVITY</span><span id="hudSens">—</span></div>
+    <div class="row"><span>EXERTION</span><span id="hudExert">—</span></div>
+  </div>
+
+  <div class="panel" id="solPanel">
+    <h3>NEAREST ROVER WAYPOINT</h3>
+    <div class="big" id="hudSol">—</div>
+    <div class="row"><span>DISTANCE</span><span id="hudSolDist">—</span></div>
+    <div class="row"><span>DTM RANGE</span><span id="elevRange">—</span></div>
+  </div>
+
+  <div class="panel" id="keysPanel">
+    <b>WASD</b> move &nbsp; <b>SHIFT</b> run &nbsp; <b>SPACE</b> jump<br/>
+    <b>V</b> 1st / 3rd person &nbsp; <b>F</b> survey mode<br/>
+    <b>M</b> gap-fill overlay &nbsp; <b>T</b> rover track &nbsp; <b>B</b> head bob<br/>
+    <b>N</b> mute &nbsp; <b>[ ]</b> sensitivity &nbsp; <b>R</b> respawn<br/>
+    <b>ESC</b> settings &nbsp; <b>G</b> ray tracing &nbsp; <b>H</b> call it over &nbsp; <b>SHIFT+H</b> heel/roam<br/><b>,</b> / <b>.</b> time of sol
+  </div>
+
+  <div id="crosshair"></div>
+  <div id="notice"></div>
+  <div id="companionSay"></div>
+  <div id="inputMode" class="badge none">CLICK TO CAPTURE</div>
+  <div id="srcNote">
+    <span id="dataNote">—</span><br/>
+    Terrain: USGS Mars 2020 TRN HiRISE DTM mosaic · Track: NASA MMGIS M20 traverse ·
+    <b style="color:#e8a45c">9.3% of this tile is interpolated, shown desaturated</b>
+  </div>
+</div>
+
+<div id="startOverlay" class="hidden">
+  <div class="start-card">
+    <button id="startBtn">CLICK TO EXPLORE</button>
+    <p>Mouse look needs pointer lock. If your browser refuses it,
+       hold the left mouse button and drag to look instead — both work.</p>
+    <p class="keys"><b>WASD</b> move &middot; <b>SHIFT</b> run &middot; <b>SPACE</b> jump &middot;
+       <b>V</b> view &middot; <b>ESC</b> settings</p>
+  </div>
+</div>
+
+<div id="settings"></div>
+
+<div id="loading">
+  <h1>JEZERO</h1>
+  <h2>18.44° N &nbsp; 77.45° E</h2>
+  <div id="loadTrack"><div id="loadBar"></div></div>
+  <div id="loadStatus">Initialising…</div>
+  <div id="credit" style="line-height:1.9">
+    Real elevation from the USGS <em>Mars 2020 Terrain Relative Navigation HiRISE DTM Mosaic</em>,
+    built from six HiRISE stereo pairs at 1 m/px.<br/>
+    Rover track from NASA MMGIS Mars 2020 traverse data, through sol 1980 (45.1 km driven).
+  </div>
+</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "./vendor/three.module.js"
+  }
+}
+</script>
+<script type="module" src="./src/main.js"></script>
+</body>
+</html>

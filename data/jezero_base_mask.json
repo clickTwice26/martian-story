@@ -1,0 +1,9 @@
+{
+  "width": 2048,
+  "height": 1024,
+  "metresPerPixel": 8.0,
+  "covers": "jezero_base",
+  "validFraction": 0.9069252014160156,
+  "gapFraction": 0.09307479858398438,
+  "encoding": "8-bit greyscale; 255 = measured DTM, 0 = gap-filled"
+}
