@@ -94,6 +94,36 @@ by it. These are genuine sphere-traced rays against the real DTM:
 
 Five tiers from Off to Ultra (0 → 696 texel fetches per pixel).
 
+### Performance: only pay for what is seen and near
+
+Most of the frame used to go on work nobody could see, or on recomputing last
+frame's answer. The engine now scales its effort with visibility and range:
+
+- **Cached ray-traced lighting.** Shadow and AO depend on the ground and the
+  sun, not the camera, so the same rays are traced once per DTM texel into
+  textures — a 4 km window at 2 m around you plus the whole tile at 8 m — and
+  the terrain does one lookup per pixel instead of up to 696 fetches. Rebaking
+  happens only when the sun moves ~0.04° or you travel 600 m, sliced across
+  frames into a back buffer so it never hitches. Toggle under Graphics.
+- **Adaptive resolution.** When the frame rate falls below target the render
+  scale drops in proportion to the shortfall, and climbs back with headroom.
+  It never exceeds the Resolution Scale you chose.
+- **Terrain LOD capped at data resolution.** Beyond the synthesised-detail band
+  (and a 64 m interaction radius) patches stop subdividing once their vertices
+  are as dense as the 2 m DTM, since finer triangles would only redraw the same
+  bilinear ramps. Nodes outside the view frustum were already skipped.
+- **Distance-faded shading detail.** Metre-scale noise is sub-pixel past ~300 m;
+  it is faded out and its 12 noise evaluations skipped there.
+- **Rocks** are built in 49 m chunks that are frustum-culled individually, and
+  rocks too small to cover a couple of pixels at their distance are not drawn.
+- **Rover track** is split into 1 km tiles so only on-screen stretches draw.
+- **Animation LOD.** The support unit's skeleton is posed every frame up close,
+  every 2nd/4th frame further out, and not at all off screen; the crew body is
+  not animated in first person. AI and movement still run every frame.
+
+The HUD's RENDER panel shows the live render scale and whether lighting is
+cached or traced live.
+
 ### Surface detail
 
 A 2 m/px DTM contains nothing under ~4 m. Those missing objects — rocks, ripples,
@@ -144,6 +174,7 @@ index.html              entry point
 src/
   main.js               bootstrap, frame loop, HUD
   terrain.js            CDLOD quadtree + ray-traced shading
+  lightcache.js         bakes the ray-traced shadow/AO into textures, sliced over frames
   heightfield.js        elevation sampling, measured vs detailed
   detail.js             sub-DTM synthesis + rock scatter
   marstime.js           Allison & McEwen / Mars24

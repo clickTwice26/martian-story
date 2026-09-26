@@ -122,18 +122,23 @@ export class RockField {
     this.cell = opts.cell ?? 7.0;            // metres
     this.radius = opts.radius ?? 135;
     this.maxRocks = opts.maxRocks ?? 2600;
+    // A rock narrower than this fraction of its distance is a pixel or two
+    // on screen; it is skipped rather than drawn as a shimmering speck.
+    this.minAngular = opts.minAngular ?? 0.0022;
+    this.chunkCells = opts.chunkCells ?? 7;  // 49 m chunks, frustum-culled individually
     this.scale = 1;
 
-    const geo = this._rockGeometry();
-    const mat = new THREE.MeshStandardMaterial({
+    this.geometry = this._rockGeometry();
+    this.material = new THREE.MeshStandardMaterial({
       color: 0x6e4a35, roughness: 0.94, metalness: 0.0, flatShading: true,
     });
-    this.mesh = new THREE.InstancedMesh(geo, mat, this.maxRocks);
-    this.mesh.castShadow = true;
-    this.mesh.receiveShadow = true;
-    this.mesh.frustumCulled = false;
-    this.mesh.count = 0;
-    this.mesh.instanceColor = null;
+    // `mesh` is a group of per-chunk instanced meshes: one draw call each, but
+    // three.js can now drop every chunk outside the view frustum, where a
+    // single field-wide mesh always drew all of them.
+    this.mesh = new THREE.Group();
+    this._chunks = new Map();
+    this._pool = [];
+    this._chunkCap = Math.ceil(this.chunkCells * this.chunkCells * 18);
 
     this._m = new THREE.Matrix4();
     this._q = new THREE.Quaternion();
@@ -158,6 +163,30 @@ export class RockField {
     return g;
   }
 
+  _chunk(key, kx, kz) {
+    let c = this._chunks.get(key);
+    if (c) return c;
+    let m = this._pool.pop();
+    if (!m) {
+      m = new THREE.InstancedMesh(this.geometry, this.material, this._chunkCap);
+      m.castShadow = true;
+      m.receiveShadow = true;
+      m.instanceColor = null;
+      m.frustumCulled = true;
+      m.boundingSphere = new THREE.Sphere();
+    }
+    const span = this.chunkCells * this.cell;
+    const cx = (kx + 0.5) * span, cz = (kz + 0.5) * span;
+    // Half-diagonal plus headroom for relief inside the chunk and rock size.
+    m.boundingSphere.center.set(cx, this.hf.baseHeightAt(cx, cz), cz);
+    m.boundingSphere.radius = span * 0.7072 + 28;
+    m.count = 0;
+    this.mesh.add(m);
+    c = { mesh: m, n: 0 };
+    this._chunks.set(key, c);
+    return c;
+  }
+
   setScale(v) { this.scale = v; this._lastCellX = NaN; }   // force a rebuild
 
   update(camX, camZ) {
@@ -165,8 +194,11 @@ export class RockField {
     if (cx === this._lastCellX && cz === this._lastCellZ) return this.count;
     this._lastCellX = cx; this._lastCellZ = cz;
 
+    for (const c of this._chunks.values()) { this.mesh.remove(c.mesh); this._pool.push(c.mesh); }
+    this._chunks.clear();
+
     const R = Math.ceil(this.radius / this.cell);
-    const hf = this.hf;
+    const hf = this.hf, K = this.chunkCells;
     let n = 0;
 
     for (let j = -R; j <= R && n < this.maxRocks; j++) {
@@ -183,6 +215,9 @@ export class RockField {
         // rises toward outcrops rather than starting from nothing.
         const rocky = Math.min(2.2, 0.55 + slope / 14);
         const want = Math.floor(h0 * 4.0 * rocky * this.scale);
+        if (!want) continue;
+        const kx = Math.floor(gx / K), kz = Math.floor(gz / K);
+        let chunk = null;
 
         for (let k = 0; k < want && n < this.maxRocks; k++) {
           const hx = hash2(gx * 31 + k, gz * 17 - k);
@@ -193,18 +228,27 @@ export class RockField {
           const x = (gx + hx) * this.cell, z = (gz + hz) * this.cell;
           // log-ish size distribution: mostly cobbles, rare metre boulders
           const size = 0.07 + Math.pow(hs, 3.4) * 1.55;
+          // Placement stays deterministic; only what is drawn depends on range.
+          if (size < Math.hypot(x - camX, z - camZ) * this.minAngular) continue;
+          chunk = chunk || this._chunk(kx * 100003 + kz, kx, kz);
+          if (chunk.n >= this._chunkCap) break;
           const y = (hf.baseHeightAt ? hf.baseHeightAt(x, z) : hf.heightAt(x, z)) - size * 0.22;
 
           this._p.set(x, y, z);
           this._e.set(hr * 0.5 - 0.25, hr * 12.9, hx * 0.5 - 0.25);
           this._q.setFromEuler(this._e);
           this._s.set(size * (0.8 + hz * 0.5), size * (0.62 + hs * 0.5), size * (0.8 + hr * 0.5));
-          this.mesh.setMatrixAt(n++, this._m.compose(this._p, this._q, this._s));
+          chunk.mesh.setMatrixAt(chunk.n++, this._m.compose(this._p, this._q, this._s));
+          n++;
         }
       }
     }
-    this.mesh.count = n;
-    this.mesh.instanceMatrix.needsUpdate = true;
+    for (const c of this._chunks.values()) {
+      c.mesh.count = c.n;
+      c.mesh.instanceMatrix.needsUpdate = true;
+      c.mesh.instanceMatrix.clearUpdateRanges?.();
+      c.mesh.instanceMatrix.addUpdateRange(0, c.n * 16);
+    }
     this.count = n;
     return n;
   }

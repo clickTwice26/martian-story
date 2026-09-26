@@ -61,7 +61,7 @@ function buildPatchGeometry() {
 /* Shared by both stages: the fragment shader needs it to trace rays, not just
    to shade. Kept as one string so vertex displacement and ray marching can
    never disagree about where the ground is. */
-const HEIGHT_SAMPLER = /* glsl */`
+export const HEIGHT_SAMPLER = /* glsl */`
 uniform usampler2D uHeight;
 uniform vec2  uHeightSize;
 uniform vec2  uAnchor;
@@ -82,6 +82,68 @@ float sampleH(vec2 world) {
   float h01 = float(texelFetch(uHeight, clamp(b + ivec2(0, 1), ivec2(0), m), 0).r);
   float h11 = float(texelFetch(uHeight, clamp(b + ivec2(1, 1), ivec2(0), m), 0).r);
   return uElev.x + mix(mix(h00, h10, t.x), mix(h01, h11, t.x), t.y) * uElev.y;
+}
+`;
+
+/* Also shared with the lighting cache's bake pass (lightcache.js): the cached
+   shadows are the very same rays, just traced once per DTM texel instead of
+   once per screen pixel per frame. */
+export const RT_GLSL = /* glsl */`
+uniform int   uRTSteps;       // 0 disables terrain ray tracing entirely
+uniform float uRTSoftness;    // penumbra width; 0 = hard shadow edges
+uniform float uRTMaxDist;     // how far a shadow ray is allowed to travel
+uniform int   uAODirs;        // 0 disables ambient occlusion
+uniform int   uAOSteps;
+uniform float uAORadius;
+
+/**
+ * Sphere-traced soft shadow against the real elevation data.
+ *
+ * No hardware ray tracing is exposed to browsers - WebGPU does not surface RT
+ * cores and WebGL2 certainly does not. But a heightfield is the one case where
+ * that does not matter: the surface is a graph, so the vertical gap between
+ * ray and terrain is a usable proximity bound and the ray can be advanced by
+ * it. These are genuine rays intersecting the genuine USGS DTM.
+ *
+ * Long shadows matter more on Mars than on Earth: at Jezero the sun spends
+ * most of the sol low, and crater rims throw kilometre-scale shadows.
+ */
+float traceSunShadow(vec3 p, vec3 L) {
+  if (uRTSteps <= 0 || L.y <= 0.01) return 1.0;
+  float t = uMPP * 1.5;                       // step off the surface
+  float res = 1.0;
+  for (int i = 0; i < 128; i++) {
+    if (i >= uRTSteps) break;
+    vec3 q = p + L * t;
+    float h = sampleH(q.xz);
+    float d = q.y - h;
+    if (d < 0.0) return 0.0;                  // terrain blocks the sun
+    res = min(res, uRTSoftness * d / t);      // closest approach -> penumbra
+    t += clamp(d * 0.75, uMPP * 0.9, uRTMaxDist * 0.06);
+    if (t > uRTMaxDist) break;
+  }
+  return clamp(res, 0.0, 1.0);
+}
+
+/** Horizon-traced ambient occlusion: how much sky each point can actually see. */
+float traceAO(vec3 p) {
+  if (uAODirs <= 0) return 1.0;
+  float occ = 0.0;
+  float golden = 2.39996323;
+  for (int d = 0; d < 8; d++) {
+    if (d >= uAODirs) break;
+    float a = float(d) * golden;
+    vec2 dir = vec2(cos(a), sin(a));
+    float maxSlope = 0.0;
+    for (int s = 1; s <= 8; s++) {
+      if (s > uAOSteps) break;
+      float dist = uAORadius * (float(s) / float(uAOSteps));
+      float h = sampleH(p.xz + dir * dist);
+      maxSlope = max(maxSlope, (h - p.y) / dist);
+    }
+    occ += clamp(maxSlope, 0.0, 1.0);
+  }
+  return clamp(1.0 - occ / float(uAODirs), 0.0, 1.0);
 }
 `;
 
@@ -160,61 +222,31 @@ precision highp usampler2D;
 ${OUTPUT_PARS}
 ${HEIGHT_SAMPLER}
 
-uniform int   uRTSteps;       // 0 disables terrain ray tracing entirely
-uniform float uRTSoftness;    // penumbra width; 0 = hard shadow edges
-uniform float uRTMaxDist;     // how far a shadow ray is allowed to travel
-uniform int   uAODirs;        // 0 disables ambient occlusion
-uniform int   uAOSteps;
-uniform float uAORadius;
+${RT_GLSL}
 
-/**
- * Sphere-traced soft shadow against the real elevation data.
- *
- * No hardware ray tracing is exposed to browsers - WebGPU does not surface RT
- * cores and WebGL2 certainly does not. But a heightfield is the one case where
- * that does not matter: the surface is a graph, so the vertical gap between
- * ray and terrain is a usable proximity bound and the ray can be advanced by
- * it. These are genuine rays intersecting the genuine USGS DTM.
- *
- * Long shadows matter more on Mars than on Earth: at Jezero the sun spends
- * most of the sol low, and crater rims throw kilometre-scale shadows.
- */
-float traceSunShadow(vec3 p, vec3 L) {
-  if (uRTSteps <= 0 || L.y <= 0.01) return 1.0;
-  float t = uMPP * 1.5;                       // step off the surface
-  float res = 1.0;
-  for (int i = 0; i < 128; i++) {
-    if (i >= uRTSteps) break;
-    vec3 q = p + L * t;
-    float h = sampleH(q.xz);
-    float d = q.y - h;
-    if (d < 0.0) return 0.0;                  // terrain blocks the sun
-    res = min(res, uRTSoftness * d / t);      // closest approach -> penumbra
-    t += clamp(d * 0.75, uMPP * 0.9, uRTMaxDist * 0.06);
-    if (t > uRTMaxDist) break;
-  }
-  return clamp(res, 0.0, 1.0);
-}
+/* Lighting cache (lightcache.js). Sun and sky only move slowly, so shadow and
+   AO are baked into textures in heightfield space and merely looked up here:
+   a fine window around the camera plus a coarse copy of the whole tile.
+   0 falls back to tracing live, per pixel, every frame. */
+uniform int       uLightCache;
+uniform sampler2D uNearLight;
+uniform vec2      uNearOrigin;   // world XZ of texel (0,0)'s centre
+uniform float     uNearTexel;    // metres per cache texel
+uniform vec2      uNearSize;
+uniform sampler2D uFarLight;
+uniform vec2      uFarOrigin;
+uniform float     uFarTexel;
+uniform vec2      uFarSize;
 
-/** Horizon-traced ambient occlusion: how much sky each point can actually see. */
-float traceAO(vec3 p) {
-  if (uAODirs <= 0) return 1.0;
-  float occ = 0.0;
-  float golden = 2.39996323;
-  for (int d = 0; d < 8; d++) {
-    if (d >= uAODirs) break;
-    float a = float(d) * golden;
-    vec2 dir = vec2(cos(a), sin(a));
-    float maxSlope = 0.0;
-    for (int s = 1; s <= 8; s++) {
-      if (s > uAOSteps) break;
-      float dist = uAORadius * (float(s) / float(uAOSteps));
-      float h = sampleH(p.xz + dir * dist);
-      maxSlope = max(maxSlope, (h - p.y) / dist);
-    }
-    occ += clamp(maxSlope, 0.0, 1.0);
-  }
-  return clamp(1.0 - occ / float(uAODirs), 0.0, 1.0);
+vec2 cachedLight(vec2 w) {
+  vec2 tf = (w - uFarOrigin) / uFarTexel;
+  vec2 far = textureLod(uFarLight, (tf + 0.5) / uFarSize, 0.0).rg;
+  vec2 tn = (w - uNearOrigin) / uNearTexel;
+  vec2 edge = min(tn, uNearSize - 1.0 - tn);
+  float wN = clamp(min(edge.x, edge.y) / 48.0, 0.0, 1.0);   // fade out at the window rim
+  if (wN <= 0.0) return far;
+  vec2 near = textureLod(uNearLight, (tn + 0.5) / uNearSize, 0.0).rg;
+  return mix(far, near, wN);
 }
 
 uniform vec3  uSunDir;
@@ -258,14 +290,20 @@ float fbm(vec2 p){
 
 void main() {
   vec3 N = normalize(vNormal);
+  float dist = length(uCamPos - vWorld);
 
   // Perturb the data-resolution normal with fine detail so the surface does not
-  // read as flat between DTM samples.
-  float e = 0.35;
-  float n1 = fbm(vWorld.xz * 0.55);
-  float nx = fbm(vWorld.xz * 0.55 + vec2(e, 0.0)) - n1;
-  float nz = fbm(vWorld.xz * 0.55 + vec2(0.0, e)) - n1;
-  N = normalize(N + vec3(-nx, 0.0, -nz) * 0.55);   // real displacement now carries most of this
+  // read as flat between DTM samples. It is metre-scale, so past a few hundred
+  // metres it is sub-pixel and only aliases: fade it out and skip the 12 noise
+  // evaluations entirely, which is most of the screen.
+  float nearFx = 1.0 - smoothstep(160.0, 320.0, dist);
+  if (nearFx > 0.0) {
+    float e = 0.35;
+    float n1 = fbm(vWorld.xz * 0.55);
+    float nx = fbm(vWorld.xz * 0.55 + vec2(e, 0.0)) - n1;
+    float nz = fbm(vWorld.xz * 0.55 + vec2(0.0, e)) - n1;
+    N = normalize(N + vec3(-nx, 0.0, -nz) * 0.55 * nearFx);   // real displacement now carries most of this
+  }
 
   // Slope drives the mix: dust settles on flats, rock is exposed on steeps.
   float slopeT = smoothstep(0.12, 0.55, vSlope);
@@ -276,14 +314,22 @@ void main() {
   vec3 pale = vec3(0.300, 0.168, 0.094);
   vec3 albedo = mix(dust, rock, slopeT);
   albedo = mix(albedo, pale, smoothstep(0.35, 0.75, fbm(vWorld.xz * 0.014)) * 0.35);
-  albedo *= 0.86 + 0.28 * fbm(vWorld.xz * 0.9);
+  // 0.469 is this fbm's mean, which is all a distant pixel can resolve of it
+  float fine = nearFx > 0.0 ? mix(0.469, fbm(vWorld.xz * 0.9), nearFx) : 0.469;
+  albedo *= 0.86 + 0.28 * fine;
 
   vec3 L = normalize(uSunDir);
   float ndl = max(dot(N, L), 0.0);
 
   // rays traced against the actual DTM, not a shadow map
-  float shadow = traceSunShadow(vWorld, L);
-  float ao = traceAO(vWorld);
+  float shadow, ao;
+  if (uLightCache != 0) {
+    vec2 lit = cachedLight(vWorld.xz);
+    shadow = lit.r; ao = lit.g;
+  } else {
+    shadow = traceSunShadow(vWorld, L);
+    ao = traceAO(vWorld);
+  }
 
   // Mars has no ozone and a dusty sky: strong direct sun, warm hemispheric
   // bounce, and noticeably little blue anywhere.
@@ -306,7 +352,6 @@ void main() {
     col = mix(col, flat_ * (0.93 + 0.07 * hatch), synth);
   }
 
-  float dist = length(uCamPos - vWorld);
   float fog  = 1.0 - exp(-pow(dist * uFogDensity, 2.0));
   col = mix(col, uFogColor, clamp(fog, 0.0, 1.0));
 
@@ -331,6 +376,9 @@ export class Terrain {
     this.splitK = opts.splitK ?? 2.6;                  // higher = more detail held further out
     this.maxInstances = opts.maxInstances ?? 6000;
     this.skirtDepth = opts.skirtDepth ?? 6;
+    // Radius around the camera always meshed at full leaf density, detail or
+    // not, so the drawn triangles match the bilinear surface collision uses.
+    this.interactRange = opts.interactRange ?? 64;
 
     this.nodesBuilt = 0;
     this.hf.buildMinMax(Math.max(1, Math.round(this.leafSize / this.hf.mpp)));
@@ -381,6 +429,15 @@ export class Terrain {
         uAODirs: { value: 5 },
         uAOSteps: { value: 5 },
         uAORadius: { value: 90.0 },
+        uLightCache: { value: 0 },
+        uNearLight: { value: null },
+        uNearOrigin: { value: new THREE.Vector2() },
+        uNearTexel: { value: 1 },
+        uNearSize: { value: new THREE.Vector2(1, 1) },
+        uFarLight: { value: null },
+        uFarOrigin: { value: new THREE.Vector2() },
+        uFarTexel: { value: 1 },
+        uFarSize: { value: new THREE.Vector2(1, 1) },
         // 1/(2R) for Mars. At 3317 m this drops the surface exactly 1.62 m,
         // which is eye height - so the horizon lands where it really does.
         uCurvature: { value: 1 / (2 * 3396190) },
@@ -465,7 +522,12 @@ export class Terrain {
     if (out.count >= this.maxInstances) return;
     if (!this._visible(n)) return;
     const d = this._distanceToNode(n, p);
-    if (n.level === 0 || d > this.splitK * n.size) {
+    // Past the synthesised-detail band there is nothing finer than the DTM to
+    // draw, so once a patch's vertex spacing reaches the data's own 2 m,
+    // splitting further only multiplies triangles over identical bilinear
+    // ramps. This removes the densest ring the plain distance rule builds.
+    const atDataRes = n.size / GRID <= this.hf.mpp && d > this._fineRange;
+    if (n.level === 0 || atDataRes || d > this.splitK * n.size) {
       const lo = this.splitK * n.size * 1.35;
       const hi = this.splitK * n.size * 2.0;
       const morph = Math.min(1, Math.max(0, (d - lo) / Math.max(hi - lo, 1e-6)));
@@ -487,6 +549,8 @@ export class Terrain {
     this._mat.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
     this._frustum.setFromProjectionMatrix(this._mat);
 
+    const u = this.material.uniforms;
+    this._fineRange = Math.max(this.interactRange, u.uDetailScale.value > 0 ? u.uDetailFar.value : 0);
     const p = camera.position;
     const out = { count: 0 };
     for (const r of this.roots) this._select(r, p, out);

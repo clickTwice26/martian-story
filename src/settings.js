@@ -31,16 +31,31 @@ export const SCHEMA = {
         u.uRTSteps.value = p.steps; u.uRTSoftness.value = p.soft;
         u.uRTMaxDist.value = p.maxDist; u.uAODirs.value = p.aoDirs;
         u.uAOSteps.value = p.aoSteps; u.uAORadius.value = p.aoRadius;
+        if (c.lightCache) c.lightCache.invalidate();
       },
+    },
+    lightCache: {
+      label: 'Cache Ray-Traced Lighting', type: 'toggle', def: true,
+      hint: 'Traces the same shadow and AO rays once per DTM texel, re-baking only when the sun moves or you travel far, instead of per pixel every frame. Off traces live.',
+      apply: (v, c) => { if (c.lightCache) { c.lightCache.enabled = v; c.lightCache.invalidate(); } },
     },
     softShadows: {
       label: 'Soft Shadow Penumbra', type: 'slider', min: 0, max: 40, step: 1, def: 14,
       hint: '0 gives hard, knife-edge shadows. Higher widens the penumbra.',
-      apply: (v, c) => { c.terrain.material.uniforms.uRTSoftness.value = v; },
+      apply: (v, c) => { c.terrain.material.uniforms.uRTSoftness.value = v; if (c.lightCache) c.lightCache.invalidate(); },
     },
     resolutionScale: {
       label: 'Resolution Scale', type: 'slider', min: 0.5, max: 2.0, step: 0.05, def: 1.0,
-      apply: (v, c) => { c.renderer.setPixelRatio(Math.min(devicePixelRatio * v, 2.5)); c.onResize(); },
+      apply: (v, c) => { c.res.base = v; c.res.dyn = 1; c.applyPixelRatio(); c.onResize(); },
+    },
+    adaptiveRes: {
+      label: 'Adaptive Resolution', type: 'toggle', def: true,
+      hint: 'Lowers the render scale on the fly when the frame rate drops below target, and restores it when there is headroom. Never exceeds Resolution Scale.',
+      apply: (v, c) => { if (!v) { c.res.dyn = 1; c.applyPixelRatio(); } },
+    },
+    targetFps: {
+      label: 'Target Frame Rate', type: 'slider', min: 30, max: 144, step: 1, def: 60,
+      apply: () => {},
     },
     terrainDetail: {
       label: 'Terrain Detail', type: 'slider', min: 1.4, max: 4.5, step: 0.1, def: 2.7,

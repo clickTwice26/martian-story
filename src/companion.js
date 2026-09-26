@@ -332,7 +332,18 @@ export class Companion {
     if (this.clock >= this.emoteUntil) {
       this._play(this.speed > 2.1 ? 'Running' : this.speed > 0.22 ? 'Walking' : 'Idle');
     }
-    this.mixer.update(dt);
+    // Animation level of detail, set by the host from distance and view:
+    // 1 = every frame, N = every Nth frame with the time accumulated, 0 = off
+    // screen, so the skeleton is not posed at all. Movement is unaffected.
+    this._animDt = (this._animDt || 0) + dt;
+    this._animFrame = (this._animFrame || 0) + 1;
+    const every = this.animEvery ?? 1;
+    if (every > 0 && this._animFrame % every === 0) {
+      this.mixer.update(Math.min(this._animDt, 0.5));
+      this._animDt = 0;
+    } else if (every === 0) {
+      this._animDt = Math.min(this._animDt, 0.5);
+    }
 
     if (this.face && this.face.morphTargetInfluences) {
       const inf = this.face.morphTargetInfluences;

@@ -9,6 +9,7 @@ import { Settings } from './settings.js';
 import { Input } from './input.js';
 import { Companion } from './companion.js';
 import { RockField } from './detail.js';
+import { LightCache } from './lightcache.js';
 import { buildSettingsUI } from './settingsui.js';
 import { siteTime, missionSol, season, formatSolClock, sunDirection,
          utcForSolAndLmst, JEZERO, SOL_SECONDS } from './marstime.js';
@@ -61,7 +62,14 @@ async function loadMask(url) {
 
 /* ----------------------------------------------------------------- setup -- */
 const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
-renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+/* Pixel ratio = the user's chosen scale x an adaptive factor (<= 1) that the
+   frame loop lowers when the GPU cannot hold the target frame rate, and
+   restores once it can. The user's choice is a ceiling, never exceeded. */
+const res = { base: 1, dyn: 1 };
+function applyPixelRatio() {
+  renderer.setPixelRatio(Math.min(devicePixelRatio * res.base, 2.5) * res.dyn);
+}
+applyPixelRatio();
 renderer.setSize(innerWidth, innerHeight);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -93,7 +101,7 @@ scene.add(sunLight);
 scene.add(new THREE.HemisphereLight(0xc79a6d, 0x4a2e20, 0.62 * Math.PI));
 
 const audio = new SuitAudio();
-let hf, terrain, player, projector, waypoints, mask, astronaut, blobShadow, companion, rocks;
+let hf, terrain, lightCache, player, projector, waypoints, mask, astronaut, blobShadow, companion, rocks;
 /* Shared with the overlay materials so the rover track bends with the ground
    instead of floating off it at range. */
 const uCamPosC = { value: new THREE.Vector3() };
@@ -152,6 +160,7 @@ async function boot() {
   terrain.material.uniforms.uMask.value = mask.tex;
   terrain.material.uniforms.uMaskSize.value.set(mask.width, mask.height);
   scene.add(terrain.mesh);
+  lightCache = new LightCache(renderer, terrain);
   bar(0.93);
 
   status('Placing rover traverse…');
@@ -199,7 +208,8 @@ async function boot() {
   bar(1);
   // ---- settings: bind to the live engine, then apply everything at once ----
   settings.bind({
-    renderer, terrain, sky, audio, camera, companion, hf, rocks,
+    renderer, terrain, lightCache, sky, audio, camera, companion, hf, rocks,
+    res, applyPixelRatio,
     curvature: uCurvatureC,
     settings: SETTINGS,
     traverseLine: window.__traverseLine,
@@ -227,7 +237,7 @@ async function boot() {
   el('loading').classList.add('hidden');
   el('startOverlay').classList.remove('hidden');   // never un-hidden before: the bug
   window.__mars = { THREE, scene, camera, renderer, hf, terrain, player, projector,
-                    waypoints, astronaut, audio, mask, SETTINGS, settings, timeState, input, companion, rocks,
+                    waypoints, astronaut, audio, mask, SETTINGS, settings, timeState, input, companion, rocks, lightCache, res,
                     sky, sunLight, SUN_DIR,
                     setMarsTime: (sol, lmst) => { timeState.sol = sol; timeState.lmst = lmst; },
                     get viewMode() { return viewMode; },
@@ -236,21 +246,37 @@ async function boot() {
   requestAnimationFrame(frame);
 }
 
+/**
+ * The 45 km traverse is split into 1 km tiles, each its own draw with a real
+ * bounding sphere, so only the stretches inside the view frustum are drawn
+ * instead of the whole track every frame.
+ */
 function buildTraverse(trav, wps) {
-  const pts = [];
+  const TILE = 1024;
+  const tiles = new Map();
   for (const f of trav.features) {
     const c = f.geometry.coordinates;
-    for (let i = 0; i + 1 < c.length; i++)
-      for (const [lon, lat] of [c[i], c[i + 1]]) {
-        const [x, z] = projector.lonLatToWorld(lon, lat);
-        pts.push(x, hf.heightAt(x, z) + 0.45, z);
-      }
+    for (let i = 0; i + 1 < c.length; i++) {
+      const [x0, z0] = projector.lonLatToWorld(c[i][0], c[i][1]);
+      const [x1, z1] = projector.lonLatToWorld(c[i + 1][0], c[i + 1][1]);
+      const key = Math.floor(x0 / TILE) + ',' + Math.floor(z0 / TILE);
+      let t = tiles.get(key);
+      if (!t) tiles.set(key, t = []);
+      t.push(x0, hf.heightAt(x0, z0) + 0.45, z0, x1, hf.heightAt(x1, z1) + 0.45, z1);
+    }
   }
-  const g = new THREE.BufferGeometry();
-  g.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3));
-  const line = new THREE.LineSegments(g, bendWithPlanet(new THREE.LineBasicMaterial({
-    color: 0x35e0ff, transparent: true, opacity: 0.8, toneMapped: false })));
-  line.frustumCulled = false;
+  const lineMat = bendWithPlanet(new THREE.LineBasicMaterial({
+    color: 0x35e0ff, transparent: true, opacity: 0.8, toneMapped: false }));
+  const line = new THREE.Group();
+  for (const pts of tiles.values()) {
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3));
+    g.computeBoundingSphere();
+    // The shader bends the track down by d^2/2R: at the far edge of the tile
+    // that is ~40 m, so pad the sphere or tiles would be culled while visible.
+    g.boundingSphere.radius += 40;
+    line.add(new THREE.LineSegments(g, lineMat));
+  }
   scene.add(line);
   window.__traverseLine = line;
 
@@ -489,6 +515,7 @@ function frame() {
   requestAnimationFrame(frame);
   const now = performance.now() / 1000;
   let dt = now - last; last = now;
+  const rawDt = dt;
   if (dt > 0.05) dt = 0.05;
 
   updateMarsTimeAndSun(dt);
@@ -507,7 +534,9 @@ function frame() {
 
   astronaut.root.position.set(player.pos.x, player.pos.y, player.pos.z);
   astronaut.root.rotation.y = bodyYaw;
-  astronaut.animate(dt, player.gaitPhase, player.speed01, !player.onGround, player.lean);
+  // Nobody sees the crew body in first person or survey mode; skip the skinning.
+  if (viewMode === 'third' && player.mode !== 'fly')
+    astronaut.animate(dt, player.gaitPhase, player.speed01, !player.onGround, player.lean);
 
   const gy = hf.heightAt(player.pos.x, player.pos.z);
   blobShadow.position.set(player.pos.x, gy + 0.03, player.pos.z);
@@ -516,6 +545,7 @@ function frame() {
   blobShadow.material.opacity = 0.34 / (1 + lift * 0.9);
 
   if (companion && companion.root.visible) {
+    companion.animEvery = companionAnimRate();
     companion.update(dt, { player, projector, waypoints, isMeasured, timeState, settings });
   }
 
@@ -528,10 +558,53 @@ function frame() {
   if (camera.fov !== SETTINGS.view.fov) { camera.fov = SETTINGS.view.fov; camera.updateProjectionMatrix(); }
 
   terrain.update(camera);
+  _viewFrustum.setFromProjectionMatrix(_viewProj.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse));
+  lightCache.update(camera.position, SUN_DIR);
   renderer.render(scene, camera);
 
+  adaptResolution(rawDt);
   frames++; fpsT += dt;
   if (fpsT > 0.35) { fps = frames / fpsT; frames = 0; fpsT = 0; updateHUD(); }
+}
+
+/* ------------------------------------------------ range & view awareness -- */
+const _viewFrustum = new THREE.Frustum(), _viewProj = new THREE.Matrix4();
+const _compSphere = new THREE.Sphere(new THREE.Vector3(), 1.4);
+
+/**
+ * How often the support unit's skeleton is re-posed: every frame up close,
+ * less often as it shrinks with distance, and not at all while it is off
+ * screen. Its AI and movement still run every frame regardless. Uses last
+ * frame's frustum, which is one frame stale at most.
+ */
+function companionAnimRate() {
+  _compSphere.center.set(companion.pos.x, companion.pos.y + 0.9, companion.pos.z);
+  if (!_viewFrustum.intersectsSphere(_compSphere)) return 0;
+  const d = camera.position.distanceTo(_compSphere.center);
+  return d < 35 ? 1 : d < 90 ? 2 : 4;
+}
+
+/**
+ * Dynamic resolution. Pixel count is the lever that matters here - the
+ * terrain shader's cost scales with it - so when the frame rate sags below
+ * target the render scale drops (in proportion to the shortfall, since cost
+ * goes with scale squared), and it creeps back up once there is headroom.
+ */
+const dynRes = { t: 0, n: 0, warm: 3, MIN: 0.5 };
+function adaptResolution(frameDt) {
+  dynRes.t += frameDt; dynRes.n++;
+  if (dynRes.t < 0.75) return;
+  const fps = dynRes.n / dynRes.t;
+  dynRes.t = 0; dynRes.n = 0;
+  if ((dynRes.warm -= 0.75) > 0) return;     // shader compiles and first bakes are not the steady state
+  let next = res.dyn;
+  if (!settings.get('adaptiveRes')) next = 1;
+  else if (!settingsOpen) {
+    const target = settings.get('targetFps');
+    if (fps < target * 0.88) next = Math.max(dynRes.MIN, res.dyn * Math.max(0.75, Math.sqrt(fps / target)));
+    else if (fps > target * 0.96 && res.dyn < 1) next = Math.min(1, res.dyn * 1.06);
+  }
+  if (Math.abs(next - res.dyn) > 0.005) { res.dyn = next; applyPixelRatio(); }
 }
 
 const _proj = new THREE.Vector3();
@@ -566,6 +639,10 @@ function updateHUD() {
   el('hudNodes').textContent = terrain.stats.nodes;
   el('hudTris').textContent = (terrain.stats.tris / 1e6).toFixed(2) + ' M';
   if (rocks) el('hudRocks').textContent = rocks.count;
+  el('hudRes').textContent = renderer.getPixelRatio().toFixed(2) + 'x' +
+    (res.dyn < 0.995 ? ' (auto)' : '');
+  el('hudLight').textContent = terrain.material.uniforms.uLightCache.value ? 'CACHED'
+    : terrain.material.uniforms.uRTSteps.value > 0 ? 'LIVE' : 'OFF';
   el('hudSens').textContent = SETTINGS.mouse.sensitivity.toFixed(3) + '°/cnt';
   el('hudExert').textContent = Math.round(player.exertion * 100) + '%';
 
