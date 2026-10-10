@@ -51,10 +51,43 @@ The game needs a server only because browsers refuse ES modules and `fetch()` on
 | `X` / right click | defend — hold to keep the guard up |
 | `E` | grab the rock in front of you · press again to put it down |
 | `,` `.` | time of sol · `ESC` settings |
+| `SPACE` (hold) / `ESC` | skip the opening cinematic |
 
 Every binding is rebindable under Settings → Controls. Gamepads work through the
 standard mapping (`X` punch, `Y` grab, `LB` block). Mouse buttons only act while
 the pointer is captured; in drag-to-look mode use the keys.
+
+### The opening
+
+A 100-second cinematic plays before you take control (hold `SPACE` or press
+`ESC` to skip; turn it off under Settings → World):
+
+1. **Black.** The courier *Kestrel*, day 212 of an Earth–Mars transfer; one crew
+   member in hibernation, the support unit **K-7** at the helm.
+2. **The solar system.** A blooming sun, orbits, Earth and Mars with info cards,
+   the Kestrel's transfer arc, the title.
+3. **The ship and its pilot.** The Kestrel gliding on twin energy beams; the
+   robot at the controls in the cockpit.
+4. **Mars.** Valles Marineris and the Tharsis volcanoes swing into view as
+   Phobos crosses the disc.
+5. **The strike.** Debris takes out the port engine: alarms, red light, the
+   entry corridor lost, plasma building on the hull.
+6. **Jezero, sol 1980, 17:15.** On the real DTM, a fireball comes out of the low
+   western sun, roars overhead and ploughs into the crater floor. The boom
+   arrives late, because sound crosses Mars at ~240 m/s, and low-passed, because the
+   thin CO₂ air carries almost nothing above 240 Hz.
+7. **Aftermath.** Dust settles; K-7 gets up beside the wreck and calls for you,
+   and the camera lands behind your astronaut where play begins.
+
+The wreck, its smoke column and the debris along the furrow **stay in the
+world** (with collision), whether or not the opening is watched.
+
+Everything is procedural and offline: planets and the galaxy are baked once
+into textures during loading (Mars carries its real landmarks at their real
+coordinates, Jezero included), the ship is built from primitives and a painted
+canvas, and the score is synthesised in Web Audio. Acts I–II render through a
+small HDR post chain (mip-chain bloom, ACES, grade, vignette, grain, lens flare)
+that costs less than a gameplay frame; act III is the game's own renderer.
 
 ---
 
@@ -278,6 +311,14 @@ src/
   audio.js              Web Audio suit synthesis
   settings.js/ui        declarative settings, one schema drives menu and engine
   sky.js, shaderlib.js, png16.js, settingsui.js
+  intro/
+    intro.js            the opening's director: timeline, shots, captions, wreck site
+    space.js            galaxy, stars, sun, planets with atmospheres
+    bake.js             procedural planet / galaxy bakes (Mars landmarks, Earth, Jupiter)
+    ship.js             the Kestrel, its pilot, plumes, plasma sheath, and the wreck
+    particles.js        instanced billboard particles and ballistic debris
+    post.js             HDR bloom + grade composite for the space acts
+    score.js            synthesised score and Mars-correct sound design
 data/                   baked NASA tiles + rover traverse
 tools/                  the range-request extractors
 server/                 Go static server (range requests, gzip, correct MIME)

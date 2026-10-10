@@ -13,6 +13,7 @@ import { LightCache } from './lightcache.js';
 import { buildSettingsUI, keyName } from './settingsui.js';
 import { CharacterActions, LIFT_MAX } from './actions.js';
 import { Interactables, PropSet, RockSource } from './interact.js';
+import { Intro, WreckSite, crashLayout, INTRO_LMST } from './intro/intro.js';
 import { siteTime, missionSol, season, formatSolClock, sunDirection,
          utcForSolAndLmst, JEZERO, SOL_SECONDS } from './marstime.js';
 
@@ -130,6 +131,8 @@ scene.add(new THREE.HemisphereLight(0xc79a6d, 0x4a2e20, 0.62 * Math.PI));
 const audio = new SuitAudio();
 let hf, terrain, lightCache, player, projector, waypoints, mask, astronaut, blobShadow, companion, rocks;
 let props, interactables, actions, grabMarker;
+let wreck = null, intro = null, crash = null;
+const SPAWN = { x: 0, z: 0, yaw: 2.3 };
 /* Shared with the overlay materials so the rover track bends with the ground
    instead of floating off it at range. */
 const uCamPosC = { value: new THREE.Vector3() };
@@ -242,10 +245,17 @@ async function boot() {
   scene.add(companion.marker);     // the beacon it plants at whatever it wants to show you
 
   player = new Player(hf);
-  player.placeAt(0, 0);
+  player.placeAt(SPAWN.x, SPAWN.z);
   _body.pos = player.pos; _body.vel = player.vel;
-  companion.placeNear(0, 0);
-  player.aimYaw = player.yaw = bodyYaw = 2.3;
+  // Where the Kestrel came down, ahead of the player: the wreck is part of the
+  // world whether or not the opening is watched.
+  crash = crashLayout(SPAWN, SPAWN.yaw);
+  wreck = new WreckSite(scene, hf, crash);
+  wreck.prewarm(20);
+  companion.placeNear(SPAWN.x, SPAWN.z);
+  companion.pos.set(crash.robot.x, hf.heightAt(crash.robot.x, crash.robot.z), crash.robot.z);
+  companion.root.position.copy(companion.pos);
+  player.aimYaw = player.yaw = bodyYaw = SPAWN.yaw;
   player.aimPitch = player.pitch = -0.05;
   player.events.footstep = (i, slope) => audio.footstep(i, slope);
   player.events.land = imp => audio.land(imp);
@@ -269,6 +279,10 @@ async function boot() {
     notify: (msg, ms) => showNotice(msg, ms),
   });
 
+  // The opening plays out at golden hour; the world keeps that light after it.
+  const playIntro = !!settings.get('introCinematic');
+  if (playIntro && settings.get('timeMode') === 'Mission Sol') timeState.lmst = INTRO_LMST;
+
   // Trace the sunlight now, behind the loading screen. Otherwise the first
   // frames fall back to ray marching every pixel live while the cache fills -
   // around three times the cost of a normal frame, which on a weak GPU means
@@ -279,6 +293,26 @@ async function boot() {
     lightCache.update(player.pos, SUN_DIR, 1 << 20);
     if (!lightCache.queue.length) break;
     await new Promise(r => setTimeout(r, 0));
+  }
+
+  if (playIntro) {
+    try {
+      intro = new Intro({
+        renderer, scene, hf, companion, wreck, layout: crash, audio,
+        lowQuality: settings.get('terrainMesh') === 'Low', antialias: antialiasActive,
+        renderWorld, gameplayCamera, animatePlayer: dt => astronaut.animate(dt, player.gaitPhase, 0, false, 0),
+        showPlayer: v => {
+          astronaut.setVisible(v); blobShadow.visible = v;
+          astronaut.root.position.copy(player.pos); astronaut.root.rotation.y = bodyYaw;
+        },
+        setHud: v => { el('hud').style.display = v ? '' : 'none'; },
+        onDone: introDone,
+      });
+      await intro.prepare(status);
+    } catch (e) {
+      console.warn('opening cinematic unavailable', e);
+      intro = null;
+    }
   }
 
   // three.js compiles each material on its first draw. On integrated GPUs a
@@ -316,9 +350,13 @@ async function boot() {
   });
 
   el('loading').classList.add('hidden');
+  if (intro) {
+    el('startBtn').textContent = 'BEGIN';
+    el('startHint').textContent = 'A short opening plays first. Hold SPACE or press ESC to skip it.';
+  }
   el('startOverlay').classList.remove('hidden');   // never un-hidden before: the bug
   if (lowPowerGPU) showNotice('Low-power GPU detected — using the Low quality preset. ESC → Settings to change it.', 7000);
-  window.__mars = { THREE, scene, camera, renderer, hf, terrain, player, projector,
+  window.__mars = { THREE, scene, camera, renderer, hf, terrain, player, projector, intro, wreck, crash,
                     waypoints, astronaut, audio, mask, SETTINGS, settings, timeState, input, companion, rocks, lightCache, res,
                     sky, sunLight, SUN_DIR, actions, props, interactables,
                     setMarsTime: (sol, lmst) => { timeState.sol = sol; timeState.lmst = lmst; },
@@ -510,13 +548,59 @@ function closeSettings() {
  */
 function beginPlay() {
   input.requestCapture();
-  audio.start().catch(() => {});
+  const audioReady = audio.start().catch(() => {});
   el('startOverlay').classList.add('hidden');
   hasCaptured = true;
+  // the score needs the audio context, which only exists after this gesture
+  if (intro && !intro.done && !intro.active) audioReady.finally(() => intro.start());
+}
+
+/** Draw the live world from an arbitrary camera (the opening's act III). */
+function renderWorld(cam) {
+  uCamPosC.value.copy(cam.position);
+  sky.position.copy(cam.position);
+  sky.scale.setScalar(cam.far * 0.45);
+  if (rocks && rocks.mesh.visible) rocks.update(cam.position.x, cam.position.z);
+  terrain.update(cam);
+  _viewFrustum.setFromProjectionMatrix(_viewProj.multiplyMatrices(cam.projectionMatrix, cam.matrixWorldInverse));
+  lightCache.update(cam.position, SUN_DIR);
+  renderer.render(scene, cam);
+}
+
+/** Where the gameplay camera will be at the spawn, so the opening can land on it. */
+function gameplayCamera() {
+  player.forward(_fwd);
+  _right.set(Math.cos(player.yaw), 0, -Math.sin(player.yaw));
+  const fov = SETTINGS.view.fov;
+  if (viewMode === 'first') {
+    const eye = player.eye.clone();
+    return { pos: eye, target: eye.clone().add(_fwd), fov };
+  }
+  const pivot = new THREE.Vector3(player.pos.x, player.pos.y + 1.22, player.pos.z);
+  const boom = SETTINGS.view.camDistance;
+  return {
+    pos: new THREE.Vector3(pivot.x - _fwd.x * boom + _right.x * 0.42, pivot.y - _fwd.y * boom + 0.34,
+                           pivot.z - _fwd.z * boom + _right.z * 0.42),
+    target: new THREE.Vector3(pivot.x + _fwd.x * 2.2, pivot.y + _fwd.y * 2.2 + 0.1, pivot.z + _fwd.z * 2.2),
+    fov,
+  };
+}
+
+function introDone(skipped) {
+  camBoom = SETTINGS.view.camDistance;
+  companion._greeted = true;               // it has already spoken, in the film
+  companion._setMode('roam');
+  if (skipped) companion.say?.('Kestrel is gone, Commander. Perseverance\u2019s tracks are close \u2014 follow me.', 6000);
+  if (input.mode !== 'locked') {
+    el('startBtn').textContent = 'CLICK TO EXPLORE';
+    el('startHint').textContent = 'Mouse look needs pointer lock. If your browser refuses it, hold the left mouse button and drag to look instead \u2014 both work.';
+    el('startOverlay').classList.remove('hidden');
+  }
 }
 
 addEventListener('keydown', e => {
   if (e.code !== 'Escape') return;
+  if (intro && intro.active) { e.preventDefault(); intro.skip(); return; }
   if (settingsOpen) { e.preventDefault(); closeSettings(); }
   else if (input.mode !== 'locked') { e.preventDefault(); openSettings(); }
   // While locked, the browser consumes Escape to exit the lock; the menu then
@@ -525,6 +609,12 @@ addEventListener('keydown', e => {
 
 document.addEventListener('pointerlockchange', () => {
   const locked = document.pointerLockElement === renderer.domElement;
+  if (intro && intro.active) {
+    // ESC during the film releases the lock: treat it as "skip"
+    if (!locked) intro.skip();
+    paintInputBadge();
+    return;
+  }
   if (locked) {
     hasCaptured = true;
     if (settingsOpen) { settingsOpen = false; input.enabled = true; el('settings').classList.remove('open'); }
@@ -685,6 +775,15 @@ function frame() {
   const rawDt = dt;
   if (dt > 0.05) dt = 0.05;
 
+  if (intro && intro.active) {
+    updateMarsTimeAndSun(dt);
+    intro.update(rawDt);
+    adaptResolution(rawDt);
+    frames++; fpsT += rawDt;
+    if (fpsT > 0.35) { fps = frames / fpsT; frames = 0; fpsT = 0; }
+    return;
+  }
+
   updateMarsTimeAndSun(dt);
   input.pollPad();
   pollActions();
@@ -699,6 +798,7 @@ function frame() {
     if (!actions.canJump) st.jump = false;
   }
   player.update(dt, st);
+  if (wreck && wreck.pushOut(player.pos)) { player.vel.multiplyScalar(0.5); }
   audio.update(dt, player.exertion);
 
   // Body turns toward travel when moving, toward the view when idle, and
@@ -741,6 +841,8 @@ function frame() {
   updateCamera(dt);
   uCamPosC.value.copy(camera.position);
   if (rocks && rocks.mesh.visible) rocks.update(camera.position.x, camera.position.z);
+  if (wreck) wreck.update(dt);
+  if (intro) intro.updateAfter(dt);
   updateCompanionBubble();
   updateActionHUD();
   sky.position.copy(camera.position);
