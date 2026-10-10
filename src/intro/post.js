@@ -31,7 +31,11 @@ uniform sampler2D uSrc;
 uniform vec2 uTexel;
 uniform float uPrefilter;      // 1 on the first pass: threshold + firefly guard
 uniform float uThreshold;
-vec3 s(vec2 o) { return texture(uSrc, vUv + o * uTexel).rgb; }
+/* A NaN or Inf anywhere in the scene would be spread by every pass of this
+   chain into ever larger black blocks; drop it here, and keep half-float
+   overflow out too. */
+vec3 clean(vec3 c) { return any(isnan(c)) || any(isinf(c)) ? vec3(0.0) : min(c, vec3(60000.0)); }
+vec3 s(vec2 o) { return clean(texture(uSrc, vUv + o * uTexel).rgb); }
 void main() {
   // 13-tap downsample, weighted to avoid the box filter's pulsing
   vec3 a = s(vec2(-2, 2)), b = s(vec2(0, 2)), c = s(vec2(2, 2));
@@ -90,6 +94,7 @@ vec3 toSRGB(vec3 c) {
   return mix(c * 12.92, 1.055 * pow(c, vec3(1.0 / 2.4)) - 0.055, step(0.0031308, c));
 }
 float hash(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
+vec3 clean(vec3 c) { return any(isnan(c)) || any(isinf(c)) ? vec3(0.0) : c; }
 
 vec3 flare(vec2 p) {
   if (uSunScreen.z <= 0.0) return vec3(0.0);
@@ -122,7 +127,8 @@ void main() {
   hdr.r = texture(uScene, vUv - off).r;
   hdr.g = texture(uScene, vUv).g;
   hdr.b = texture(uScene, vUv + off).b;
-  hdr += texture(uBloom, vUv).rgb * uBloomStrength;
+  hdr = clean(hdr);
+  hdr += clean(texture(uBloom, vUv).rgb) * uBloomStrength;
   hdr += flare(p);
   hdr *= uTint;
   vec3 c = cineAces(hdr * uExposure);

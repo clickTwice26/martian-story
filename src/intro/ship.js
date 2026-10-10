@@ -96,7 +96,10 @@ function fuselageGeometry() {
   const geo = new THREE.LatheGeometry(prof.map(([r, y]) => new THREE.Vector2(r, y)), 48, Math.PI, Math.PI * 2);
   geo.rotateX(-Math.PI / 2);          // nose to -Z
   geo.scale(1.0, 0.56, 1.0);          // a lifting body, not a tube
-  geo.computeVertexNormals();
+  // Keep the lathe's own normals (scale() re-normalises them). Recomputing
+  // from faces leaves the nose and tail tips - points where only zero-area
+  // triangles meet - with zero-length normals, and normalize(0) is NaN on
+  // Apple GPUs: one NaN pixel the bloom then smears into black rectangles.
   return geo;
 }
 
