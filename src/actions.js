@@ -254,8 +254,9 @@ export class CharacterActions {
     const p = this.held;
     if (!this._thrown && this.t >= 0.22) {
       this._thrown = true;
-      // Same push, any mass: lighter rocks leave faster. Capped at a good overarm.
-      const speed = Math.min(7.5, 160 / Math.max(1, p.mass));
+      // Same push, any mass: lighter rocks leave faster. Capped at a good
+      // two-handed chest toss; on Mars that still carries ~8 m.
+      const speed = Math.min(6, 120 / Math.max(1, p.mass));
       const f = _v.set(Math.sin(this.body.yaw), 0, Math.cos(this.body.yaw));
       const v = new THREE.Vector3().copy(f).multiplyScalar(speed);
       v.y = speed * 0.55;

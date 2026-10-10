@@ -73,8 +73,13 @@ export class Prop {
     if (p.y <= floor) {
       p.y = floor;
       if (v.y < -1.2) this.impact = -v.y;
-      if (v.y < -0.6) v.y *= -0.22;   // regolith eats most of the bounce
-      else v.y = 0;
+      if (v.y < -0.6) {
+        // A rock landing in regolith digs in: most of the bounce and much of
+        // the forward speed go into the crater it makes, not into a long slide.
+        const keep = Math.max(0.2, 1 - (-v.y) * 0.18);
+        v.x *= keep; v.z *= keep;
+        v.y *= -0.22;
+      } else v.y = 0;
       // Coulomb friction: the same mu*g that limits the boots
       const dec = GROUND_MU * MARS_G * dt;
       if (hs <= dec) { v.x = 0; v.z = 0; }
