@@ -148,6 +148,9 @@ export class RockField {
     this._lastCellX = NaN;
     this._lastCellZ = NaN;
     this.count = 0;
+    // Rocks picked up out of the field. Keys are stable across rebuilds and
+    // density changes, since placement is a pure function of (cell, index).
+    this.removed = new Set();
   }
 
   /** One irregular low-poly boulder; variety comes from per-instance scale. */
@@ -189,7 +192,75 @@ export class RockField {
 
   setScale(v) { this.scale = v; this._lastCellX = NaN; }   // force a rebuild
 
+  /** How many rocks cell (gx, gz) holds, before any are removed. */
+  _cellCount(gx, gz) {
+    const hf = this.hf;
+    const baseX = (gx + 0.5) * this.cell, baseZ = (gz + 0.5) * this.cell;
+    if (baseX < hf.minX || baseX > hf.maxX || baseZ < hf.minZ || baseZ > hf.maxZ) return 0;
+    // measured slope decides how rocky this patch is
+    const slope = hf.baseSlopeAt ? hf.baseSlopeAt(baseX, baseZ) : hf.slopeAt(baseX, baseZ);
+    // Jezero's floor is strewn with float rock, not swept clean; density
+    // rises toward outcrops rather than starting from nothing.
+    const rocky = Math.min(2.2, 0.55 + slope / 14);
+    return Math.floor(hash2(gx, gz) * 4.0 * rocky * this.scale);
+  }
+
+  /**
+   * Rock k of cell (gx, gz). The single source of truth for placement, shared
+   * by drawing and by query(), so what you can pick up is exactly what is drawn.
+   */
+  _rock(gx, gz, k, out, camX, camZ) {
+    const hf = this.hf;
+    const hx = hash2(gx * 31 + k, gz * 17 - k);
+    const hz = hash2(gx * 13 - k, gz * 29 + k);
+    const hs = hash2(gx * 7 + k * 101, gz * 5 + k * 57);
+    const hr = hash2(gx * 3 - k * 11, gz * 23 + k * 3);
+    const x = (gx + hx) * this.cell, z = (gz + hz) * this.cell;
+    // log-ish size distribution: mostly cobbles, rare metre boulders
+    const size = 0.07 + Math.pow(hs, 3.4) * 1.55;
+    // Drawing only: too small to see from the camera, so skip the height lookup.
+    if (camX !== undefined && size < Math.hypot(x - camX, z - camZ) * this.minAngular) return null;
+    const y = (hf.baseHeightAt ? hf.baseHeightAt(x, z) : hf.heightAt(x, z)) - size * 0.22;
+    out.size = size;
+    out.position.set(x, y, z);
+    this._e.set(hr * 0.5 - 0.25, hr * 12.9, hx * 0.5 - 0.25);
+    out.quaternion.setFromEuler(this._e);
+    out.scale.set(size * (0.8 + hz * 0.5), size * (0.62 + hs * 0.5), size * (0.8 + hr * 0.5));
+    return out;
+  }
+
+  static key(gx, gz, k) { return gx + ',' + gz + ',' + k; }
+
+  /** Take a rock out of the field for good; the next update() omits it. */
+  remove(key) {
+    this.removed.add(key);
+    this._lastCellX = NaN;
+    this.update(this._camX ?? 0, this._camZ ?? 0);
+  }
+
+  /** Rocks whose centre lies within r of (x, z), as fresh plain objects. */
+  query(x, z, r) {
+    const res = [];
+    if (this.scale <= 0 || !this.mesh.visible) return res;
+    const c = this.cell;
+    for (let gz = Math.floor((z - r) / c); gz <= Math.floor((z + r) / c); gz++) {
+      for (let gx = Math.floor((x - r) / c); gx <= Math.floor((x + r) / c); gx++) {
+        const want = this._cellCount(gx, gz);
+        for (let k = 0; k < want; k++) {
+          const key = RockField.key(gx, gz, k);
+          if (this.removed.has(key)) continue;
+          const rk = this._rock(gx, gz, k, {
+            key, size: 0, position: new THREE.Vector3(),
+            quaternion: new THREE.Quaternion(), scale: new THREE.Vector3() });
+          if ((rk.position.x - x) ** 2 + (rk.position.z - z) ** 2 <= r * r) res.push(rk);
+        }
+      }
+    }
+    return res;
+  }
+
   update(camX, camZ) {
+    this._camX = camX; this._camZ = camZ;
     const cx = Math.floor(camX / this.cell), cz = Math.floor(camZ / this.cell);
     if (cx === this._lastCellX && cz === this._lastCellZ) return this.count;
     this._lastCellX = cx; this._lastCellZ = cz;
@@ -198,46 +269,27 @@ export class RockField {
     this._chunks.clear();
 
     const R = Math.ceil(this.radius / this.cell);
-    const hf = this.hf, K = this.chunkCells;
+    const K = this.chunkCells;
+    const rk = this._tmpRock || (this._tmpRock = {
+      size: 0, position: this._p, quaternion: this._q, scale: this._s });
+    const removed = this.removed;
     let n = 0;
 
     for (let j = -R; j <= R && n < this.maxRocks; j++) {
       for (let i = -R; i <= R && n < this.maxRocks; i++) {
         if (i * i + j * j > R * R) continue;
         const gx = cx + i, gz = cz + j;
-        const h0 = hash2(gx, gz);
-        const baseX = (gx + 0.5) * this.cell, baseZ = (gz + 0.5) * this.cell;
-        if (baseX < hf.minX || baseX > hf.maxX || baseZ < hf.minZ || baseZ > hf.maxZ) continue;
-
-        // measured slope decides how rocky this patch is
-        const slope = hf.baseSlopeAt ? hf.baseSlopeAt(baseX, baseZ) : hf.slopeAt(baseX, baseZ);
-        // Jezero's floor is strewn with float rock, not swept clean; density
-        // rises toward outcrops rather than starting from nothing.
-        const rocky = Math.min(2.2, 0.55 + slope / 14);
-        const want = Math.floor(h0 * 4.0 * rocky * this.scale);
+        const want = this._cellCount(gx, gz);
         if (!want) continue;
         const kx = Math.floor(gx / K), kz = Math.floor(gz / K);
         let chunk = null;
 
         for (let k = 0; k < want && n < this.maxRocks; k++) {
-          const hx = hash2(gx * 31 + k, gz * 17 - k);
-          const hz = hash2(gx * 13 - k, gz * 29 + k);
-          const hs = hash2(gx * 7 + k * 101, gz * 5 + k * 57);
-          const hr = hash2(gx * 3 - k * 11, gz * 23 + k * 3);
-
-          const x = (gx + hx) * this.cell, z = (gz + hz) * this.cell;
-          // log-ish size distribution: mostly cobbles, rare metre boulders
-          const size = 0.07 + Math.pow(hs, 3.4) * 1.55;
+          if (removed.size && removed.has(RockField.key(gx, gz, k))) continue;
           // Placement stays deterministic; only what is drawn depends on range.
-          if (size < Math.hypot(x - camX, z - camZ) * this.minAngular) continue;
+          if (!this._rock(gx, gz, k, rk, camX, camZ)) continue;
           chunk = chunk || this._chunk(kx * 100003 + kz, kx, kz);
           if (chunk.n >= this._chunkCap) break;
-          const y = (hf.baseHeightAt ? hf.baseHeightAt(x, z) : hf.heightAt(x, z)) - size * 0.22;
-
-          this._p.set(x, y, z);
-          this._e.set(hr * 0.5 - 0.25, hr * 12.9, hx * 0.5 - 0.25);
-          this._q.setFromEuler(this._e);
-          this._s.set(size * (0.8 + hz * 0.5), size * (0.62 + hs * 0.5), size * (0.8 + hr * 0.5));
           chunk.mesh.setMatrixAt(chunk.n++, this._m.compose(this._p, this._q, this._s));
           n++;
         }

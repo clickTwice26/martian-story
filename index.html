@@ -83,6 +83,13 @@
     width:0;height:0;margin-left:-6px;border-left:6px solid transparent;
     border-right:6px solid transparent;border-top:7px solid rgba(120,190,255,.45)}
 
+  #actionPrompt{position:absolute;left:50%;top:calc(50% + 46px);transform:translateX(-50%);
+    background:rgba(18,11,7,.78);border:1px solid rgba(255,200,106,.38);color:#f2ddc6;
+    padding:6px 13px;font-size:10.5px;letter-spacing:.06em;white-space:nowrap;
+    opacity:0;transition:opacity .15s ease;pointer-events:none}
+  #actionPrompt.show{opacity:1}
+  #actionPrompt b{color:#ffc86a;font-weight:600}
+  #actionPrompt i{color:#e8806a;font-style:normal}
   #crosshair{position:absolute;left:50%;top:50%;width:13px;height:13px;
     transform:translate(-50%,-50%);opacity:.5}
   #crosshair:before,#crosshair:after{content:"";position:absolute;background:#f0d8c0}
@@ -244,10 +251,12 @@
     <b>V</b> 1st / 3rd person &nbsp; <b>F</b> survey mode<br/>
     <b>M</b> gap-fill overlay &nbsp; <b>T</b> rover track &nbsp; <b>B</b> head bob<br/>
     <b>N</b> mute &nbsp; <b>[ ]</b> sensitivity &nbsp; <b>R</b> respawn<br/>
-    <b>ESC</b> settings &nbsp; <b>G</b> ray tracing &nbsp; <b>H</b> call it over &nbsp; <b>SHIFT+H</b> heel/roam<br/><b>,</b> / <b>.</b> time of sol
+    <b>ESC</b> settings &nbsp; <b>G</b> ray tracing &nbsp; <b>H</b> call it over &nbsp; <b>SHIFT+H</b> heel/roam<br/><b>,</b> / <b>.</b> time of sol<br/>
+    <b>Q</b>/<b>CLICK</b> punch &nbsp; <b>X</b>/<b>R-CLICK</b> defend &nbsp; <b>E</b> grab / drop
   </div>
 
   <div id="crosshair"></div>
+  <div id="actionPrompt"></div>
   <div id="notice"></div>
   <div id="companionSay"></div>
   <div id="inputMode" class="badge none">CLICK TO CAPTURE</div>
@@ -264,7 +273,8 @@
     <p>Mouse look needs pointer lock. If your browser refuses it,
        hold the left mouse button and drag to look instead — both work.</p>
     <p class="keys"><b>WASD</b> move &middot; <b>SHIFT</b> run &middot; <b>SPACE</b> jump &middot;
-       <b>V</b> view &middot; <b>ESC</b> settings</p>
+       <b>V</b> view &middot; <b>ESC</b> settings<br/>
+       <b>Q</b> punch &middot; <b>X</b> defend &middot; <b>E</b> pick up / drop rocks</p>
   </div>
 </div>
 

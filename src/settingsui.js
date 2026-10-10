@@ -13,6 +13,7 @@ export function keyName(code) {
     BracketLeft: '[', BracketRight: ']', Comma: ',', Period: '.',
     Slash: '/', Semicolon: ';', Quote: "'", Backquote: '`',
     Minus: '-', Equal: '=', Tab: 'TAB', Enter: 'ENTER', Backspace: 'BKSP',
+    Mouse0: 'MOUSE L', Mouse1: 'MOUSE M', Mouse2: 'MOUSE R',
   };
   if (m[code]) return m[code];
   if (code.startsWith('Key')) return code.slice(3);
@@ -168,7 +169,8 @@ export function buildSettingsUI(settings, host, onClose, input) {
     note.innerHTML =
       'Click a slot then press a key. Every action takes two bindings, so WASD and the ' +
       'arrow keys can both work. A connected gamepad is picked up automatically: ' +
-      'left stick moves, right stick looks, <b>A</b> jumps, <b>L3</b> or the left trigger sprints.';
+      'left stick moves, right stick looks, <b>A</b> jumps, <b>L3</b> or the left trigger sprints, ' +
+      '<b>X</b> punches, <b>Y</b> grabs, <b>LB</b> blocks. Mouse buttons act only while the pointer is captured.';
     page.appendChild(note);
 
     let capturing = null;

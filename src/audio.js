@@ -221,6 +221,43 @@ export class SuitAudio {
     o.start(t); o.stop(t + 0.34);
   }
 
+  /**
+   * An arm swing, heard from inside: the suit's fabric and bearings rustle,
+   * not air rushing past - there is almost no air to rush.
+   */
+  swing(strength = 1) {
+    if (!this.ready || !this.enabled) return;
+    const ctx = this.ctx, t = ctx.currentTime;
+    const src = this._loopNoise();
+    const bp = ctx.createBiquadFilter();
+    bp.type = 'bandpass'; bp.Q.value = 1.4;
+    bp.frequency.setValueAtTime(420, t);
+    bp.frequency.exponentialRampToValueAtTime(1300, t + 0.09);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.07 * strength, t + 0.03);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.16);
+    src.connect(bp).connect(g).connect(this.master);
+    src.stop(t + 0.2);
+  }
+
+  /** Glove or rock meeting rock: a dull knock carried through the body. */
+  thud(strength = 1) {
+    if (!this.ready || !this.enabled) return;
+    this.footstep(Math.min(1.4, 0.5 + strength * 0.8), 0);
+    const ctx = this.ctx, t = ctx.currentTime;
+    const o = ctx.createOscillator();
+    o.type = 'triangle';
+    o.frequency.setValueAtTime(150, t);
+    o.frequency.exponentialRampToValueAtTime(70, t + 0.08);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.12 * Math.min(1.5, strength), t + 0.005);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.12);
+    o.connect(g).connect(this.master);
+    o.start(t); o.stop(t + 0.14);
+  }
+
   /** Suit effort grunt on a hard exertion spike - used sparingly. */
   exhaleSharp() {
     if (!this.ready || !this.enabled) return;
