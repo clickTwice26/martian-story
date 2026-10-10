@@ -7,6 +7,8 @@ timekeeping algorithm.
 
 No build step, no bundler, no backend. Clone, run one command, open a page.
 
+**Play online: <https://clicktwice26.github.io/martian-story/>** (GitHub Pages; needs a WebGL2 browser)
+
 ---
 
 ## What is real, and what is not
@@ -37,6 +39,12 @@ Then open <http://localhost:8123/>.
 
 The game needs a server only because browsers refuse ES modules and `fetch()` on a
 `file://` origin. There is no backend — it deploys to any static host as-is.
+
+### Hosting on GitHub Pages
+
+Settings → Pages → *Deploy from a branch* → `main`, folder `/ (root)`. Every push to
+`main` republishes the site. All paths are relative, so it works from the
+`/martian-story/` sub-path; `.nojekyll` makes Pages serve the files untouched.
 
 ### Controls
 
