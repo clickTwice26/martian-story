@@ -9,6 +9,8 @@
  * Persisted to localStorage so a session survives a reload.
  */
 
+import { GRID_OPTIONS } from './terrain.js';
+
 const STORE_KEY = 'jezero.settings.v1';
 
 /** Terrain ray-tracing tiers. Cost is dominated by texelFetch count per pixel. */
@@ -49,13 +51,27 @@ export const SCHEMA = {
       apply: (v, c) => { c.res.base = v; c.res.dyn = 1; c.applyPixelRatio(); c.onResize(); },
     },
     adaptiveRes: {
-      label: 'Adaptive Resolution', type: 'toggle', def: true,
-      hint: 'Lowers the render scale on the fly when the frame rate drops below target, and restores it when there is headroom. Never exceeds Resolution Scale.',
-      apply: (v, c) => { if (!v) { c.res.dyn = 1; c.applyPixelRatio(); } },
+      label: 'Adaptive Quality', type: 'toggle', def: true,
+      hint: 'When the frame rate drops below target, lowers render scale and terrain LOD together, and restores both when there is headroom. Never exceeds your own Resolution Scale or Terrain Detail.',
+      apply: (v, c) => {
+        if (!v) { c.res.dyn = 1; c.res.lod = 1; c.terrain.lodScale = 1; c.applyPixelRatio(); }
+      },
+    },
+    antialias: {
+      label: 'Anti-aliasing (MSAA)', type: 'toggle', def: true,
+      hint: 'Multisampled edges. Costly on integrated GPUs, where it multiplies the framebuffer. Takes effect after reloading the page.',
+      apply: (v, c) => {
+        if (v !== c.antialiasActive && c.notify) c.notify('Anti-aliasing changes take effect after a page reload.', 3600);
+      },
     },
     targetFps: {
       label: 'Target Frame Rate', type: 'slider', min: 30, max: 144, step: 1, def: 60,
       apply: () => {},
+    },
+    terrainMesh: {
+      label: 'Terrain Mesh Density', type: 'select', options: Object.keys(GRID_OPTIONS), def: 'High',
+      hint: 'Segments per terrain patch (32 / 48 / 64). Triangle count goes with the square, and on most GPUs the terrain is limited by vertices, not pixels.',
+      apply: (v, c) => { c.terrain.setGrid(GRID_OPTIONS[v] ?? GRID_OPTIONS.High); },
     },
     terrainDetail: {
       label: 'Terrain Detail', type: 'slider', min: 1.4, max: 4.5, step: 0.1, def: 2.7,
@@ -204,11 +220,18 @@ export const SCHEMA = {
   },
 };
 
+/* Low keeps ray-traced shadows: with the lighting cache they cost one texture
+   lookup per pixel, and the bake behind them is spread across frames. What a
+   weak GPU cannot afford is triangles and multisampled pixels. */
 export const QUALITY_PRESETS = {
-  Low:    { rayTracing: 'Off',    resolutionScale: 0.75, terrainDetail: 2.0, softShadows: 0 },
-  Medium: { rayTracing: 'Medium', resolutionScale: 1.0,  terrainDetail: 2.7, softShadows: 14 },
-  High:   { rayTracing: 'High',   resolutionScale: 1.0,  terrainDetail: 3.4, softShadows: 22 },
-  Ultra:  { rayTracing: 'Ultra',  resolutionScale: 1.25, terrainDetail: 4.0, softShadows: 30 },
+  Low:    { rayTracing: 'Low',    resolutionScale: 0.75, terrainDetail: 2.0, softShadows: 6,
+            terrainMesh: 'Low',    lightCache: true, antialias: false },
+  Medium: { rayTracing: 'Medium', resolutionScale: 1.0,  terrainDetail: 2.7, softShadows: 14,
+            terrainMesh: 'Medium', lightCache: true, antialias: true },
+  High:   { rayTracing: 'High',   resolutionScale: 1.0,  terrainDetail: 3.4, softShadows: 22,
+            terrainMesh: 'High',   lightCache: true, antialias: true },
+  Ultra:  { rayTracing: 'Ultra',  resolutionScale: 1.25, terrainDetail: 4.0, softShadows: 30,
+            terrainMesh: 'High',   lightCache: true, antialias: true },
 };
 
 export class Settings {
@@ -219,6 +242,7 @@ export class Settings {
     // Key bindings are not a simple control, so they live alongside the schema
     // values rather than inside it, but persist through the same store.
     this.values.keybinds = null;
+    this.fromStore = false;
     this.load();
     this.ctx = null;
     this.listeners = [];
@@ -268,6 +292,7 @@ export class Settings {
     try {
       const raw = localStorage.getItem(STORE_KEY);
       if (!raw) return;
+      this.fromStore = true;            // a returning player: never second-guess their choices
       const saved = JSON.parse(raw);
       for (const k of Object.keys(this.values)) if (k in saved) this.values[k] = saved[k];
     } catch (e) { /* ignore corrupt state */ }

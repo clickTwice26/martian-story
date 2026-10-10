@@ -46,7 +46,10 @@ void main() {
 `;
 
 function makeTarget(w, h) {
+  // Two channels (shadow, AO) at 8 bits: RG8 is colour-renderable in WebGL2,
+  // and half of RGBA8's memory and of the bandwidth every terrain pixel reads.
   const rt = new THREE.WebGLRenderTarget(w, h, {
+    format: THREE.RGFormat, type: THREE.UnsignedByteType,
     depthBuffer: false, stencilBuffer: false,
     minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter,
     wrapS: THREE.ClampToEdgeWrapping, wrapT: THREE.ClampToEdgeWrapping,
@@ -97,6 +100,10 @@ export class LightCache {
     this.far.fixedOrigin = new THREE.Vector2(hf.minX, hf.minZ);
 
     this.queue = [];           // pending bake jobs, FIFO so a fast sun cannot starve the far level
+    // Fraction of BAND_PIXELS traced per frame. The adaptive-quality loop lowers
+    // it on a struggling GPU so a re-bake is spread thinner instead of adding a
+    // fixed slab of ray marching to frames that are already over budget.
+    this.budgetScale = 1;
     this.stats = { bakes: 0 };
   }
 
@@ -119,7 +126,10 @@ export class LightCache {
 
   _queued(L) { return this.queue.some(j => j.L === L); }
 
-  update(camPos, sunDir) {
+  /** True once both levels hold a finished bake the terrain can sample. */
+  get ready() { return this.near.frontValid && this.far.frontValid; }
+
+  update(camPos, sunDir, budget = BAND_PIXELS * this.budgetScale) {
     const tu = this.terrain.material.uniforms;
     const traced = tu.uRTSteps.value > 0 || tu.uAODirs.value > 0;
     if (!this.enabled || !traced) { tu.uLightCache.value = 0; this.queue.length = 0; return; }
@@ -137,7 +147,7 @@ export class LightCache {
     if (!this._queued(F) && (!F.frontValid || F.frontSun.dot(sunDir) < SUN_EPS))
       this.queue.push(this._job(F, F.fixedOrigin, sunDir));
 
-    this._work(BAND_PIXELS);
+    this._work(budget);
 
     tu.uLightCache.value = N.frontValid && F.frontValid ? 1 : 0;
   }

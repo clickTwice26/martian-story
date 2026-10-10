@@ -16,13 +16,22 @@ import { DETAIL_GLSL } from './detail.js';
  * swap and nothing pops.
  */
 
-const GRID = 64;                 // segments per patch edge
+/* Segments per patch edge. Every node draws the same patch, so triangle count
+   is nodes x GRID^2 - the single biggest cost on a weak GPU, where the terrain
+   is vertex-bound long before it is fill-bound. Must be even: the CDLOD morph
+   slides odd grid lines onto even ones. Switchable at runtime (setGrid). */
+export const GRID_OPTIONS = { Low: 32, Medium: 48, High: 64 };
+const GRID = GRID_OPTIONS.High;
+/* Adaptive LOD never scales splitK below this (or below the user's own value,
+   if lower): further down the selection starts putting neighbouring nodes
+   more than one level apart, which the skirts cannot be relied on to hide. */
+const MIN_SPLIT_K = 1.5;
 
-function buildPatchGeometry() {
-  // (GRID+1)^2 interior vertices plus a one-cell skirt ring. The skirt is
+function buildPatchGeometry(grid) {
+  // (grid+1)^2 interior vertices plus a one-cell skirt ring. The skirt is
   // insurance against hairline cracks where neighbouring nodes differ by more
   // than one LOD level, which distance-based selection can occasionally produce.
-  const n = GRID + 3;            // includes one duplicated ring on each side
+  const n = grid + 3;            // includes one duplicated ring on each side
   const verts = n * n;
   const pos = new Float32Array(verts * 3);
   const skirt = new Float32Array(verts);
@@ -30,18 +39,18 @@ function buildPatchGeometry() {
   let p = 0;
   for (let j = 0; j < n; j++) {
     for (let i = 0; i < n; i++) {
-      const gi = Math.min(GRID, Math.max(0, i - 1));
-      const gj = Math.min(GRID, Math.max(0, j - 1));
-      pos[p * 3 + 0] = gi / GRID;
+      const gi = Math.min(grid, Math.max(0, i - 1));
+      const gj = Math.min(grid, Math.max(0, j - 1));
+      pos[p * 3 + 0] = gi / grid;
       pos[p * 3 + 1] = 0;
-      pos[p * 3 + 2] = gj / GRID;
+      pos[p * 3 + 2] = gj / grid;
       skirt[p] = (i === 0 || j === 0 || i === n - 1 || j === n - 1) ? 1 : 0;
       p++;
     }
   }
 
   const quads = (n - 1) * (n - 1);
-  const idx = new Uint32Array(quads * 6);
+  const idx = new Uint16Array(quads * 6);   // (64+3)^2 = 4489 vertices: 16 bits is plenty
   let k = 0;
   for (let j = 0; j < n - 1; j++) {
     for (let i = 0; i < n - 1; i++) {
@@ -81,6 +90,36 @@ float sampleH(vec2 world) {
   float h10 = float(texelFetch(uHeight, clamp(b + ivec2(1, 0), ivec2(0), m), 0).r);
   float h01 = float(texelFetch(uHeight, clamp(b + ivec2(0, 1), ivec2(0), m), 0).r);
   float h11 = float(texelFetch(uHeight, clamp(b + ivec2(1, 1), ivec2(0), m), 0).r);
+  return uElev.x + mix(mix(h00, h10, t.x), mix(h01, h11, t.x), t.y) * uElev.y;
+}
+`;
+
+/* Vertex stage only: the height plus its four one-texel neighbours for the
+   normal. Five separate sampleH calls fetch 20 texels, but they overlap - the
+   union is a 4x4 block minus its corners - so this fetches each of those 12
+   once. h is computed exactly as sampleH computes it, so collision still
+   matches the drawn surface. */
+const HEIGHT_NORMAL_SAMPLER = /* glsl */`
+float hTexel(ivec2 c, ivec2 m) { return float(texelFetch(uHeight, clamp(c, ivec2(0), m), 0).r); }
+
+float sampleHN(vec2 world, out vec3 nrm) {
+  vec2 f  = world / uMPP + uAnchor;
+  vec2 i0 = floor(f);
+  vec2 t  = f - i0;
+  ivec2 m = ivec2(uHeightSize) - 1;
+  ivec2 b = ivec2(i0);
+  float h00 = hTexel(b,                 m), h10 = hTexel(b + ivec2( 1, 0), m);
+  float h01 = hTexel(b + ivec2(0, 1),   m), h11 = hTexel(b + ivec2( 1, 1), m);
+  float hm0 = hTexel(b + ivec2(-1, 0),  m), hm1 = hTexel(b + ivec2(-1, 1), m);
+  float h20 = hTexel(b + ivec2( 2, 0),  m), h21 = hTexel(b + ivec2( 2, 1), m);
+  float h0m = hTexel(b + ivec2(0, -1),  m), h1m = hTexel(b + ivec2( 1,-1), m);
+  float h02 = hTexel(b + ivec2(0, 2),   m), h12 = hTexel(b + ivec2( 1, 2), m);
+  float hl = mix(mix(hm0, h00, t.x), mix(hm1, h01, t.x), t.y);
+  float hr = mix(mix(h10, h20, t.x), mix(h11, h21, t.x), t.y);
+  float hd = mix(mix(h0m, h1m, t.x), mix(h00, h10, t.x), t.y);
+  float hu = mix(mix(h01, h11, t.x), mix(h02, h12, t.x), t.y);
+  // Elevation offset cancels in the differences; only the scale is needed.
+  nrm = normalize(vec3((hl - hr) * uElev.y, 2.0 * uMPP, (hd - hu) * uElev.y));
   return uElev.x + mix(mix(h00, h10, t.x), mix(h01, h11, t.x), t.y) * uElev.y;
 }
 `;
@@ -152,6 +191,7 @@ precision highp float;
 precision highp int;
 precision highp usampler2D;
 ${HEIGHT_SAMPLER}
+${HEIGHT_NORMAL_SAMPLER}
 ${DETAIL_GLSL}
 uniform vec3  uCamPos;
 uniform float uCurvature;     // 1/(2R); 0 renders a flat plane
@@ -175,15 +215,10 @@ void main() {
   vec2 gm   = g - frac * iMorph;
 
   vec2 world = iOrigin + gm * iSize;
-  float h    = sampleH(world);
 
-  // per-vertex normal: 4 extra fetches here beats 16 per fragment
-  float d  = uMPP;
-  float hl = sampleH(world - vec2(d, 0.0));
-  float hr = sampleH(world + vec2(d, 0.0));
-  float hd = sampleH(world - vec2(0.0, d));
-  float hu = sampleH(world + vec2(0.0, d));
-  vec3  nrm = normalize(vec3(hl - hr, 2.0 * d, hd - hu));
+  // per-vertex normal from the same texel block: cheaper here than per fragment
+  vec3  nrm;
+  float h = sampleHN(world, nrm);
 
   // slope of the MEASURED surface drives shading and the detail mask
   vSlope = acos(clamp(nrm.y, -1.0, 1.0));
@@ -374,6 +409,9 @@ export class Terrain {
     this.hf = heightfield;
     this.leafSize = opts.leafSize ?? 128;              // metres
     this.splitK = opts.splitK ?? 2.6;                  // higher = more detail held further out
+    // Multiplier on splitK owned by the adaptive-quality loop (1 = as chosen).
+    this.lodScale = 1;
+    this.grid = opts.grid ?? GRID;
     this.maxInstances = opts.maxInstances ?? 6000;
     this.skirtDepth = opts.skirtDepth ?? 6;
     // Radius around the camera always meshed at full leaf density, detail or
@@ -384,7 +422,7 @@ export class Terrain {
     this.hf.buildMinMax(Math.max(1, Math.round(this.leafSize / this.hf.mpp)));
     this._buildTree();
 
-    const geo = buildPatchGeometry();
+    const geo = buildPatchGeometry(this.grid);
     this.iOrigin = new THREE.InstancedBufferAttribute(new Float32Array(this.maxInstances * 2), 2);
     this.iSize = new THREE.InstancedBufferAttribute(new Float32Array(this.maxInstances), 1);
     this.iMorph = new THREE.InstancedBufferAttribute(new Float32Array(this.maxInstances), 1);
@@ -407,7 +445,7 @@ export class Terrain {
         uAnchor: { value: new THREE.Vector2(heightfield.anchorCol, heightfield.anchorRow) },
         uMPP: { value: heightfield.mpp },
         uElev: { value: new THREE.Vector2(heightfield.elevMin, heightfield.elevSpan) },
-        uGrid: { value: GRID },
+        uGrid: { value: this.grid },
         uSkirtDepth: { value: this.skirtDepth },
         uSunDir: { value: new THREE.Vector3(0.45, 0.42, -0.79).normalize() },
         uSunColor: { value: new THREE.Color(0xffe9d4) },
@@ -453,9 +491,29 @@ export class Terrain {
     this.geometry = geo;
 
     this.stats = { nodes: 0, tris: 0 };
+    this._selNode = new Array(this.maxInstances);
+    this._selDist = new Float32Array(this.maxInstances);
+    this._selMorph = new Float32Array(this.maxInstances);
+    this._order = [];
     this._frustum = new THREE.Frustum();
     this._mat = new THREE.Matrix4();
     this._box = new THREE.Box3();
+  }
+
+  /** Swap the shared patch for one with a different segment count. */
+  setGrid(grid) {
+    if (grid === this.grid || grid % 2) return;
+    const old = this.geometry, geo = buildPatchGeometry(grid);
+    for (const k of ['iOrigin', 'iSize', 'iMorph']) {
+      geo.setAttribute(k, old.getAttribute(k));
+      old.deleteAttribute(k);            // shared: keep their buffers alive through dispose()
+    }
+    geo.instanceCount = old.instanceCount;
+    geo.boundingSphere = old.boundingSphere;
+    old.dispose();
+    this.mesh.geometry = this.geometry = geo;
+    this.grid = grid;
+    this.material.uniforms.uGrid.value = grid;
   }
 
   // GLSL3 shaders declare their own outputs; three still injects these chunks.
@@ -526,19 +584,19 @@ export class Terrain {
     // draw, so once a patch's vertex spacing reaches the data's own 2 m,
     // splitting further only multiplies triangles over identical bilinear
     // ramps. This removes the densest ring the plain distance rule builds.
-    const atDataRes = n.size / GRID <= this.hf.mpp && d > this._fineRange;
-    if (n.level === 0 || atDataRes || d > this.splitK * n.size) {
-      const lo = this.splitK * n.size * 1.35;
-      const hi = this.splitK * n.size * 2.0;
+    const k = this._k;
+    const atDataRes = n.size / this.grid <= this.hf.mpp && d > this._fineRange;
+    if (n.level === 0 || atDataRes || d > k * n.size) {
+      const lo = k * n.size * 1.35;
+      const hi = k * n.size * 2.0;
       const morph = Math.min(1, Math.max(0, (d - lo) / Math.max(hi - lo, 1e-6)));
       const i = out.count++;
-      this.iOrigin.array[i * 2] = n.x;
-      this.iOrigin.array[i * 2 + 1] = n.z;
-      this.iSize.array[i] = n.size;
-      this.iMorph.array[i] = morph;
+      this._selNode[i] = n;
+      this._selDist[i] = d;
+      this._selMorph[i] = morph;
       // Drop subtrees well behind us so exploring the whole map cannot grow
       // the tree without bound.
-      if (n.children && d > this.splitK * n.size * 4) { n.children = null; }
+      if (n.children && d > k * n.size * 4) { n.children = null; }
     } else {
       for (const c of this._children(n)) this._select(c, p, out);
     }
@@ -551,9 +609,25 @@ export class Terrain {
 
     const u = this.material.uniforms;
     this._fineRange = Math.max(this.interactRange, u.uDetailScale.value > 0 ? u.uDetailFar.value : 0);
+    this._k = Math.max(Math.min(this.splitK, MIN_SPLIT_K), this.splitK * this.lodScale);
     const p = camera.position;
     const out = { count: 0 };
     for (const r of this.roots) this._select(r, p, out);
+
+    // Front to back, so the depth test rejects hidden ground before it is
+    // shaded. three.js cannot sort inside one instanced draw, but the
+    // instances themselves can be written in order.
+    const order = this._order, dist = this._selDist;
+    order.length = out.count;
+    for (let i = 0; i < out.count; i++) order[i] = i;
+    order.sort((a, b) => dist[a] - dist[b]);
+    for (let j = 0; j < out.count; j++) {
+      const i = order[j], n = this._selNode[i];
+      this.iOrigin.array[j * 2] = n.x;
+      this.iOrigin.array[j * 2 + 1] = n.z;
+      this.iSize.array[j] = n.size;
+      this.iMorph.array[j] = this._selMorph[i];
+    }
 
     this.iOrigin.needsUpdate = true;
     this.iSize.needsUpdate = true;
@@ -565,7 +639,7 @@ export class Terrain {
 
     this.material.uniforms.uCamPos.value.copy(p);
     this.stats.nodes = out.count;
-    this.stats.tris = out.count * (GRID + 2) * (GRID + 2) * 2;
+    this.stats.tris = out.count * (this.grid + 2) * (this.grid + 2) * 2;
     return out.count;
   }
 }

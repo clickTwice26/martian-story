@@ -105,9 +105,13 @@ frame's answer. The engine now scales its effort with visibility and range:
   the terrain does one lookup per pixel instead of up to 696 fetches. Rebaking
   happens only when the sun moves ~0.04° or you travel 600 m, sliced across
   frames into a back buffer so it never hitches. Toggle under Graphics.
-- **Adaptive resolution.** When the frame rate falls below target the render
-  scale drops in proportion to the shortfall, and climbs back with headroom.
-  It never exceeds the Resolution Scale you chose.
+- **Adaptive quality.** When the frame rate falls below target, render scale
+  *and* terrain LOD drop together by the square root of the shortfall, and
+  climb back with headroom. Both levers are needed: on integrated GPUs the
+  terrain is vertex-bound, so lowering resolution alone only blurs the image.
+  If both sit at their floors and it is still too slow, the terrain mesh steps
+  down a density for the session. Never exceeds the settings you chose; the
+  render scale moves in 5% steps, since each change reallocates the framebuffer.
 - **Terrain LOD capped at data resolution.** Beyond the synthesised-detail band
   (and a 64 m interaction radius) patches stop subdividing once their vertices
   are as dense as the 2 m DTM, since finer triangles would only redraw the same
@@ -121,8 +125,43 @@ frame's answer. The engine now scales its effort with visibility and range:
   every 2nd/4th frame further out, and not at all off screen; the crew body is
   not animated in first person. AI and movement still run every frame.
 
-The HUD's RENDER panel shows the live render scale and whether lighting is
-cached or traced live.
+- **Terrain mesh density.** Every quadtree node draws the same instanced patch,
+  so triangles go with its segment count squared. Low / Medium / High use
+  32 / 48 / 64 segments (0.46 M / 1.0 M / 1.5 M triangles at the start).
+- **Fewer fetches per vertex.** The height and its normal come from one 12-texel
+  block instead of five separate bilinear samples (20 fetches), with identical
+  results, so collision still matches the drawn surface.
+- **Front-to-back terrain.** Patches are written nearest-first into the
+  instanced draw, so the depth test rejects hidden ground before it is shaded.
+- **Nothing expensive after "Click to explore".** The lighting cache is baked
+  and every shader compiled behind the loading screen, so the first seconds of
+  play neither ray-march live nor stall on a driver compile.
+- **Lighter lighting cache.** Shadow and AO are stored as RG8, half the memory
+  and read bandwidth of RGBA8; re-bakes run in thinner slices while adaptive
+  quality is cutting back.
+
+### Running on low-end hardware
+
+On first run (no saved settings) a software renderer, an Intel / Mali / Adreno /
+PowerVR GPU, or a ≤4-core ≤4 GB device gets the **Low** preset automatically:
+32-segment mesh, no MSAA, 0.75 render scale, cached ray-traced shadows kept on
+(they cost one lookup per pixel). Saved choices are never overridden. MSAA
+(Settings → Graphics) only changes after a reload, because WebGL fixes it when
+the context is created.
+
+Measured on a CPU-only software GPU (SwiftShader, 4 cores, 960×540), the live
+game loop went from ~10 s per frame to ~0.3 s per frame on Low. Terrain frame
+time by setting:
+
+| | Terrain frame | Triangles |
+|---|---|---|
+| Before, defaults | 1,657 ms | 1.53 M |
+| Mesh 48 | 1,128 ms | 0.99 M |
+| Mesh 32 | 628 ms | 0.46 M |
+| Low preset | 414 ms | 0.30 M |
+
+The HUD's RENDER panel shows the live render scale, terrain LOD and mesh
+segments, and whether lighting is cached or traced live.
 
 ### Surface detail
 

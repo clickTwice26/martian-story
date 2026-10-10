@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { Heightfield } from './heightfield.js';
-import { Terrain } from './terrain.js';
+import { Terrain, GRID_OPTIONS } from './terrain.js';
 import { createMarsSky } from './sky.js';
 import { Player, MARS_G, SETTINGS } from './player.js';
 import { Astronaut } from './astronaut.js';
@@ -60,12 +60,38 @@ async function loadMask(url) {
   return { tex, arr, width: img.width, height: img.height };
 }
 
+/**
+ * First run only: guess whether this is a low-power GPU before anything is
+ * drawn, so the first impression is not a slideshow. A throwaway context is
+ * enough to read the renderer string - and MSAA has to be decided before the
+ * real context exists. The adaptive loop still tunes from measured frame times.
+ */
+function detectLowPowerGPU() {
+  try {
+    const gl = document.createElement('canvas').getContext('webgl2');
+    if (!gl) return null;
+    const ext = gl.getExtension('WEBGL_debug_renderer_info');
+    const name = String(ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER));
+    gl.getExtension('WEBGL_lose_context')?.loseContext();
+    if (/swiftshader|llvmpipe|softpipe|software|microsoft basic render/i.test(name)) return name;
+    if (/\b(intel|mali|adreno|powervr|videocore)\b/i.test(name) && !/\barc\b/i.test(name)) return name;
+    if ((navigator.hardwareConcurrency || 8) <= 4 && (navigator.deviceMemory || 8) <= 4) return name;
+  } catch (e) { /* no verdict: keep the defaults */ }
+  return null;
+}
+
 /* ----------------------------------------------------------------- setup -- */
-const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+const settings = new Settings();
+const lowPowerGPU = settings.fromStore ? null : detectLowPowerGPU();
+if (lowPowerGPU) settings.applyPreset('Low');
+
+const renderer = new THREE.WebGLRenderer({ antialias: !!settings.get('antialias'), powerPreference: 'high-performance' });
+const antialiasActive = !!settings.get('antialias');
 /* Pixel ratio = the user's chosen scale x an adaptive factor (<= 1) that the
    frame loop lowers when the GPU cannot hold the target frame rate, and
-   restores once it can. The user's choice is a ceiling, never exceeded. */
-const res = { base: 1, dyn: 1 };
+   restores once it can. The user's choice is a ceiling, never exceeded.
+   lod is the same idea for terrain triangles: a multiplier on Terrain Detail. */
+const res = { base: 1, dyn: 1, lod: 1 };
 function applyPixelRatio() {
   renderer.setPixelRatio(Math.min(devicePixelRatio * res.base, 2.5) * res.dyn);
 }
@@ -80,7 +106,6 @@ if (!renderer.capabilities.isWebGL2) { status('WebGL2 required.'); throw new Err
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(SETTINGS.view.fov, innerWidth / innerHeight, 0.18, 60000);
 const SUN_DIR = new THREE.Vector3(0.58, 0.62, -0.53).normalize();
-const settings = new Settings();
 /* Simulated Mars clock. Held separately from the settings values so the sliders
    act as a set-point the user drags, while time advances freely underneath
    without hammering localStorage sixty times a second. */
@@ -120,6 +145,14 @@ function bendWithPlanet(material) {
          float cdz = transformed.z - uCamPosC.z;
          transformed.y -= (cdx * cdx + cdz * cdz) * uCurvatureC;
        }`);
+    // The track floats 0.45 m up, but at 1 km a 24-bit depth buffer only
+    // resolves ~0.3 m (~3 m at 3 km) and WebGL has no polygon offset for
+    // lines, so without MSAA it z-fights into dashes. Scaling the view-space
+    // position toward the eye leaves it on exactly the same pixels and only
+    // pulls its depth forward, by a fraction of its range.
+    shader.vertexShader = shader.vertexShader.replace('#include <project_vertex>',
+      `#include <project_vertex>
+       gl_Position = projectionMatrix * vec4(mvPosition.xyz * 0.996, 1.0);`);
   };
   material.needsUpdate = true;
   return material;
@@ -215,7 +248,36 @@ async function boot() {
     traverseLine: window.__traverseLine,
     waypointPoints: window.__waypointPoints,
     onResize: () => applyViewport(),
+    antialiasActive,
+    notify: (msg, ms) => showNotice(msg, ms),
   });
+
+  // Trace the sunlight now, behind the loading screen. Otherwise the first
+  // frames fall back to ray marching every pixel live while the cache fills -
+  // around three times the cost of a normal frame, which on a weak GPU means
+  // the opening seconds of play are a slideshow.
+  status('Tracing sunlight across the DTM…');
+  updateMarsTimeAndSun(0);
+  for (let i = 0; i < 64; i++) {
+    lightCache.update(player.pos, SUN_DIR, 1 << 20);
+    if (!lightCache.queue.length) break;
+    await new Promise(r => setTimeout(r, 0));
+  }
+
+  // three.js compiles each material on its first draw. On integrated GPUs a
+  // driver compile of the terrain shader alone can take seconds, which would
+  // land as a freeze right after "Click to explore" - so pay it here instead,
+  // with everything that can appear (rock chunks, the beacon) in the scene.
+  status('Compiling shaders…');
+  rocks.update(player.pos.x, player.pos.z);
+  const markerWasVisible = companion.marker.visible;
+  companion.marker.visible = true;
+  try {
+    // compileAsync only helps (and otherwise warns) with parallel compile support
+    if (renderer.extensions.has('KHR_parallel_shader_compile')) await renderer.compileAsync(scene, camera);
+    else renderer.compile(scene, camera);
+  } catch (e) { console.warn('precompile', e); }
+  companion.marker.visible = markerWasVisible;
   settingsUI = buildSettingsUI(settings, el('settings'), closeSettings, input);
   viewMode = settings.get('viewMode') === 'First Person' ? 'first' : 'third';
   settings.listeners.push((k, v) => {
@@ -236,6 +298,7 @@ async function boot() {
 
   el('loading').classList.add('hidden');
   el('startOverlay').classList.remove('hidden');   // never un-hidden before: the bug
+  if (lowPowerGPU) showNotice('Low-power GPU detected — using the Low quality preset. ESC → Settings to change it.', 7000);
   window.__mars = { THREE, scene, camera, renderer, hf, terrain, player, projector,
                     waypoints, astronaut, audio, mask, SETTINGS, settings, timeState, input, companion, rocks, lightCache, res,
                     sky, sunLight, SUN_DIR,
@@ -563,7 +626,7 @@ function frame() {
   renderer.render(scene, camera);
 
   adaptResolution(rawDt);
-  frames++; fpsT += dt;
+  frames++; fpsT += rawDt;           // the clamped dt would floor the readout at 20 fps
   if (fpsT > 0.35) { fps = frames / fpsT; frames = 0; fpsT = 0; updateHUD(); }
 }
 
@@ -585,26 +648,60 @@ function companionAnimRate() {
 }
 
 /**
- * Dynamic resolution. Pixel count is the lever that matters here - the
- * terrain shader's cost scales with it - so when the frame rate sags below
- * target the render scale drops (in proportion to the shortfall, since cost
- * goes with scale squared), and it creeps back up once there is headroom.
+ * Adaptive quality. Two levers, because a GPU can run short of either:
+ * pixels (fill - the terrain shader's cost scales with them) and triangles
+ * (the terrain is one instanced patch per quadtree node, and on integrated
+ * GPUs it is vertex-bound: lowering resolution alone just blurs the image
+ * without buying a single frame). Cost goes with the square of each, so when
+ * the frame rate sags both drop by the square root of the shortfall, and both
+ * creep back once there is headroom. While either is lowered the lighting
+ * cache re-bakes in thinner slices, so a moving sun cannot add a fixed slab
+ * of ray marching to frames that are already late.
+ *
+ * Last resort, for a weak GPU the first-run check did not recognise: if both
+ * levers sit at their floors and it is still too slow, the terrain mesh steps
+ * down a density for the rest of the session. That one is not undone
+ * automatically - at a 60 Hz cap there is never the headroom to prove the
+ * denser mesh would fit - but choosing a mesh or preset in Settings restores it.
  */
-const dynRes = { t: 0, n: 0, warm: 3, MIN: 0.5 };
+const dynRes = { t: 0, n: 0, warm: 3, MIN: 0.5, LOD_MIN: 0.6, pinned: 0 };
+function stepMeshDown() {
+  const lower = Object.values(GRID_OPTIONS).filter(g => g < terrain.grid);
+  if (!lower.length) return;
+  terrain.setGrid(Math.max(...lower));
+  dynRes.warm = 1.5;                         // judge the new mesh on its own frames
+  showNotice(`Frame rate still low — terrain mesh lowered to ${terrain.grid} segments for this session.`, 4200);
+}
 function adaptResolution(frameDt) {
   dynRes.t += frameDt; dynRes.n++;
   if (dynRes.t < 0.75) return;
   const fps = dynRes.n / dynRes.t;
   dynRes.t = 0; dynRes.n = 0;
   if ((dynRes.warm -= 0.75) > 0) return;     // shader compiles and first bakes are not the steady state
-  let next = res.dyn;
-  if (!settings.get('adaptiveRes')) next = 1;
+  let nextRes = res.dyn, nextLod = res.lod;
+  if (!settings.get('adaptiveRes')) { nextRes = 1; nextLod = 1; }
   else if (!settingsOpen) {
     const target = settings.get('targetFps');
-    if (fps < target * 0.88) next = Math.max(dynRes.MIN, res.dyn * Math.max(0.75, Math.sqrt(fps / target)));
-    else if (fps > target * 0.96 && res.dyn < 1) next = Math.min(1, res.dyn * 1.06);
+    if (fps < target * 0.88) {
+      const step = Math.max(0.75, Math.sqrt(fps / target));
+      nextRes = Math.max(dynRes.MIN, res.dyn * step);
+      nextLod = Math.max(dynRes.LOD_MIN, res.lod * step);
+      const atFloor = res.dyn <= dynRes.MIN && res.lod <= dynRes.LOD_MIN;
+      dynRes.pinned = atFloor ? dynRes.pinned + 1 : 0;
+      if (dynRes.pinned >= 2) { dynRes.pinned = 0; stepMeshDown(); }
+    } else if (fps > target * 0.96) {
+      dynRes.pinned = 0;
+      nextRes = Math.min(1, res.dyn * 1.06);
+      nextLod = Math.min(1, res.lod * 1.06);
+    }
   }
-  if (Math.abs(next - res.dyn) > 0.005) { res.dyn = next; applyPixelRatio(); }
+  // Snap to 5% steps: every pixel-ratio change reallocates the framebuffer,
+  // itself a hitch, so it must not twitch by fractions of a percent.
+  nextRes = nextRes >= 1 ? 1 : Math.max(dynRes.MIN, Math.round(nextRes * 20) / 20);
+  if (nextRes !== res.dyn) { res.dyn = nextRes; applyPixelRatio(); }
+  res.lod = nextLod;
+  terrain.lodScale = nextLod;
+  lightCache.budgetScale = res.dyn < 0.995 || res.lod < 0.995 ? 0.25 : 1;
 }
 
 const _proj = new THREE.Vector3();
@@ -641,6 +738,8 @@ function updateHUD() {
   if (rocks) el('hudRocks').textContent = rocks.count;
   el('hudRes').textContent = renderer.getPixelRatio().toFixed(2) + 'x' +
     (res.dyn < 0.995 ? ' (auto)' : '');
+  el('hudLod').textContent = Math.round(res.lod * 100) + '%' + (res.lod < 0.995 ? ' (auto)' : '') +
+    ' · ' + terrain.grid;
   el('hudLight').textContent = terrain.material.uniforms.uLightCache.value ? 'CACHED'
     : terrain.material.uniforms.uRTSteps.value > 0 ? 'LIVE' : 'OFF';
   el('hudSens').textContent = SETTINGS.mouse.sensitivity.toFixed(3) + '°/cnt';
