@@ -298,6 +298,44 @@ vibration rather than through air.
 
 ---
 
+## Data and algorithm figures
+
+Computed from the files in this repository by `python3 tools/make_figures.py`
+(light and dark versions in `docs/figures/`). The elevation check is the headline:
+on ground HiRISE measured, the game's terrain sits a **median 4 cm** from NASA's own
+recorded rover elevations (612 positions, 85% within 1 m); on the gap-filled strip
+it is off by ~120 m, which is exactly why the game marks that ground.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/figures/dark/1-jezero-terrain-and-traverse.png">
+  <img alt="The Jezero DTM tile with the Perseverance traverse" src="docs/figures/light/1-jezero-terrain-and-traverse.png">
+</picture>
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/figures/dark/2-measured-vs-interpolated.png">
+  <img alt="Measured versus interpolated ground" src="docs/figures/light/2-measured-vs-interpolated.png">
+</picture>
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/figures/dark/3-terrain-vs-nasa-rover-elevation.png">
+  <img alt="Game terrain checked against NASA rover elevations" src="docs/figures/light/3-terrain-vs-nasa-rover-elevation.png">
+</picture>
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/figures/dark/4-mars24-sun-at-jezero.png">
+  <img alt="Mars24 sun elevation and azimuth at Jezero" src="docs/figures/light/4-mars24-sun-at-jezero.png">
+</picture>
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/figures/dark/5-ray-traced-shadows.png">
+  <img alt="Ray-traced shadows on the real terrain" src="docs/figures/light/5-ray-traced-shadows.png">
+</picture>
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/figures/dark/6-data-pipeline.png">
+  <img alt="From NASA data to the game" src="docs/figures/light/6-data-pipeline.png">
+</picture>
+
 ## Layout
 
 ```
@@ -328,7 +366,8 @@ src/
     post.js             HDR bloom + grade composite for the space acts
     score.js            synthesised score and Mars-correct sound design
 data/                   baked NASA tiles + rover traverse
-tools/                  the range-request extractors
+tools/                  the range-request extractors, and make_figures.py
+docs/figures/           reference figures for the data and algorithms (light / dark)
 server/                 Go static server (range requests, gzip, correct MIME)
 vendor/                 three.js r160 + rigged models, all local
 prototypes/             an earlier unrelated sandbox prototype
