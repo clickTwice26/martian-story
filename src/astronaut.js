@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { GLTFLoader } from '../vendor/jsm/loaders/GLTFLoader.js';
+import { HumanoidRig, findBone } from './rig.js';
 
 /**
  * Suited crew member, built on a real rigged humanoid rather than primitives.
@@ -20,26 +21,6 @@ const TARGET_HEIGHT = 1.85;        // suited crew height, metres
 
 const SUIT = 0xd8d3c8, SUIT_D = 0xa8a296, TRIM = 0xc8641e;
 const GOLD = 0xffbb55, DARK = 0x2b2b31, METAL = 0x9aa0a8;
-
-/** Bone names survive glTF import with punctuation stripped, so match loosely. */
-function findBone(root, ...suffixes) {
-  const norm = s => s.toLowerCase().replace(/[^a-z0-9]/g, '');
-  const bones = [];
-  root.traverse(o => { if (o.isBone) bones.push(o); });
-  // Walk the SUFFIX list outermost so priority is by preference, not by the
-  // order bones happen to appear in the hierarchy. Otherwise 'spine' matches
-  // before 'spine2' is ever considered and the backpack lands on the lower back.
-  for (const want of suffixes.map(norm)) {
-    for (const b of bones) {
-      const n = norm(b.name);
-      if (n === want) return b;
-    }
-    for (const b of bones) {
-      if (norm(b.name).endsWith(want)) return b;
-    }
-  }
-  return null;
-}
 
 export class Astronaut {
   constructor(gltf) {
@@ -87,6 +68,9 @@ export class Astronaut {
       hips: findBone(this.model, 'mixamorigHips', 'hips'),
     };
     this._buildSuitHardware();
+
+    // Procedural pose layer for punch / block / pick-up, measured off this rig.
+    this.rig = new HumanoidRig(this.root, this.model);
 
     // ---- animation ----
     this.mixer = new THREE.AnimationMixer(this.model);
@@ -173,8 +157,9 @@ export class Astronaut {
   /**
    * @param gaitPhase radians; advances with DISTANCE walked, not time
    * @param speed01   0..1 of run speed
+   * @param pose      optional action pose (see rig.js), layered over the clips
    */
-  animate(dt, gaitPhase, speed01, airborne, lean = 0) {
+  animate(dt, gaitPhase, speed01, airborne, lean = 0, pose = null) {
     const A = this.actions;
     const cycle = gaitPhase / (Math.PI * 2);           // full strides completed
 
@@ -204,5 +189,6 @@ export class Astronaut {
     if (this.helmetGroup && this.bones.head) {
       this.helmetGroup.rotation.x = -(this._leanApplied || 0) * 0.5;
     }
+    this.rig.apply(pose);
   }
 }

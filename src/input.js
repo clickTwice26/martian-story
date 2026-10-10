@@ -38,12 +38,20 @@ export const ACTION_DEFS = {
   sensUp:    { label: 'Sensitivity +', def: ['BracketRight', ''] },
   cycleRT:   { label: 'Cycle Ray Tracing', def: ['KeyG', ''] },
   companion: { label: 'Signal Support Unit', def: ['KeyH', ''] },
+  punch:     { label: 'Punch / Throw Held', def: ['KeyQ', 'Mouse0'] },
+  defend:    { label: 'Defend (hold)', def: ['KeyX', 'Mouse2'] },
+  grab:      { label: 'Grab / Drop',   def: ['KeyE', ''] },
   openMenu:  { label: 'Open Settings',  def: ['Escape', ''] },
 };
 
 const EDGE_ACTIONS = ['toggleView', 'surveyMode', 'respawn', 'roverTrack',
                       'gapOverlay', 'headBob', 'mute', 'timeBack', 'timeFwd',
-                      'sensDown', 'sensUp', 'cycleRT', 'companion'];
+                      'sensDown', 'sensUp', 'cycleRT', 'companion', 'punch', 'grab'];
+
+/* Standard-mapping gamepad buttons for the character actions:
+   X / Square punches, Y / Triangle grabs, LB blocks while held. */
+const PAD_EDGE = { punch: 2, grab: 3 };
+const PAD_HOLD = { defend: 4 };
 
 export class Input {
   constructor(canvas, opts = {}) {
@@ -97,7 +105,23 @@ export class Input {
   isDown(action) {
     if (!this.enabled) return false;
     for (const c of this.bindings[action] || []) if (c && this.down[c]) return true;
+    const pb = PAD_HOLD[action] ?? PAD_EDGE[action];
+    if (pb !== undefined) {
+      const gp = this._gamepad();
+      if (gp && gp.buttons[pb] && gp.buttons[pb].pressed) return true;
+    }
     return false;
+  }
+
+  /** Gamepad buttons have no events; turn presses into edges once per frame. */
+  pollPad() {
+    const gp = this._gamepad();
+    this._padPrev = this._padPrev || {};
+    for (const [action, i] of Object.entries(PAD_EDGE)) {
+      const now = !!(gp && this.enabled && gp.buttons[i] && gp.buttons[i].pressed);
+      if (now && !this._padPrev[action]) this.pressedEdge.add(action);
+      this._padPrev[action] = now;
+    }
   }
   /** True once per press. */
   consume(action) {
@@ -176,6 +200,12 @@ export class Input {
   }
   _setMode(m) { if (this.mode !== m) { this.mode = m; this.onModeChange(m); } }
 
+  _press(code) {
+    this.down[code] = true;
+    for (const a of EDGE_ACTIONS)
+      if ((this.bindings[a] || []).includes(code)) this.pressedEdge.add(a);
+  }
+
   clearKeys() { for (const k in this.down) this.down[k] = false; this.pressedEdge.clear(); }
 
   // ------------------------------------------------------------- wiring
@@ -187,9 +217,7 @@ export class Input {
       if (['Space', 'Tab', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code))
         e.preventDefault();
       if (e.repeat) return;
-      this.down[e.code] = true;
-      for (const a of EDGE_ACTIONS)
-        if ((this.bindings[a] || []).includes(e.code)) this.pressedEdge.add(a);
+      this._press(e.code);
     });
     addEventListener('keyup', e => { this.down[e.code] = false; });
 
@@ -216,7 +244,8 @@ export class Input {
       }
     });
 
-    addEventListener('mouseup', () => {
+    addEventListener('mouseup', e => {
+      this.down['Mouse' + e.button] = false;
       if (this.dragging) {
         this.dragging = false;
         if (this.canvas) this.canvas.style.cursor = '';
@@ -233,12 +262,14 @@ export class Input {
     // Drag-to-look fallback. Also how you look around before ever locking,
     // and the only way to look at all if pointer lock is refused.
     canvas.addEventListener('mousedown', e => {
-      if (e.button !== 0 || !this.enabled) return;
-      if (document.pointerLockElement !== canvas) {
-        this.dragging = true;
-        canvas.style.cursor = 'grabbing';
-        if (this.mode === 'none' && !this.lockFailed) this._setMode('drag');
-      }
+      if (!this.enabled) return;
+      // Mouse buttons bind like keys ('Mouse0' left, 'Mouse2' right) - but only
+      // while the pointer is captured. In drag mode the left button is the look.
+      if (document.pointerLockElement === canvas) { this._press('Mouse' + e.button); return; }
+      if (e.button !== 0) return;
+      this.dragging = true;
+      canvas.style.cursor = 'grabbing';
+      if (this.mode === 'none' && !this.lockFailed) this._setMode('drag');
     });
   }
 }

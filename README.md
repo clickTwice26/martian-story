@@ -47,11 +47,15 @@ The game needs a server only because browsers refuse ES modules and `fetch()` on
 | `V` | first / third person · `F` survey (free-fly) mode |
 | `G` | cycle ray tracing · `M` gap-fill overlay · `T` rover track · `B` head bob |
 | `H` | call the support unit · `SHIFT+H` heel / roam |
+| `Q` / left click | punch (press again for a jab–cross combo) · throw what you are carrying |
+| `X` / right click | defend — hold to keep the guard up |
+| `E` | grab the rock in front of you · press again to put it down |
 | `,` `.` | time of sol · `ESC` settings |
 | `SPACE` (hold) / `ESC` | skip the opening cinematic |
 
 Every binding is rebindable under Settings → Controls. Gamepads work through the
-standard mapping.
+standard mapping (`X` punch, `Y` grab, `LB` block). Mouse buttons only act while
+the pointer is captured; in drag-to-look mode use the keys.
 
 ### The opening
 
@@ -228,6 +232,53 @@ Measured against prediction: acceleration 1.98 vs 2.05 m/s²; stopping distance
 0.424 vs 0.440 m (0.167 m on Earth); sliding begins at 32° against a predicted
 angle of repose of `atan(0.55)` = 28.8°.
 
+### Character actions: punch, defend, grab
+
+The donor model ships with idle, walk and run, and nothing else. Rather than
+author a clip per verb per model, an action is described as *where the hands
+go*: a hand target and an elbow pole in the character's own frame, plus how far
+to crouch and bend. `rig.js` turns that into joint rotations with analytic
+two-bone IK, layered after the animation mixer. Arms reach, knees bend to keep
+the boots planted, the spine flexes and twists. Nothing is specific to this
+skeleton: proportions are measured off whatever Mixamo / Ready Player Me rig
+is loaded.
+
+- **Punch** — guard, strike, recover in 0.42 s. The torso turns into it, the
+  other hand covers the visor, and a second press chains a cross. The fist
+  delivers ~28 N·s, which knocks a cobble loose and does nothing to a boulder.
+- **Defend** — forearms up in front of the visor while held; you can still
+  move, at half speed.
+- **Grab** — step in, squat, get both hands round the rock, lift it to the
+  chest. Mass comes from its real volume at basalt density (2,900 kg/m³). The
+  lift limit is 80 kg — only ~30 kg-force on Mars, but the mass, and the
+  effort of moving it, is all still there. Heavier rocks get a strained attempt
+  and a note on why. Carrying slows you, rules out running above 25 kg and
+  jumping above 40 kg. Press again to set it down, or punch to throw it — the
+  same push leaves a lighter rock faster.
+
+Rocks are procedural, regenerated from a hash whenever the camera crosses a
+cell, so "picking one up" removes its key from the field and swaps in an
+identical loose body in the same place. Dropped and thrown rocks fall, bounce
+and slide under Mars gravity with the boots' own μ = 0.55, then sleep.
+
+The pieces are separate so they can be reused anywhere:
+
+| | |
+|---|---|
+| `rig.js` | `HumanoidRig` — the pose layer for any humanoid skeleton |
+| `actions.js` | `CharacterActions` — the state machine; no input, camera or mesh code |
+| `interact.js` | `Interactables` registry, `Prop` loose bodies, `RockSource` adapter |
+
+```js
+const actions = new CharacterActions({ world: interactables, ground: hf.heightAt.bind(hf), dims: rig.dims });
+actions.punch(); actions.setDefend(true); actions.grab();       // from input, or from AI
+actions.update(dt, { pos, yaw, aimYaw, vel });                  // each frame
+rig.apply(actions.pose);                                        // after the mixer
+```
+
+Anything with `position`, `radius`, `mass` and `take()` (plus an optional
+`hit()`) can be registered as grabbable through a provider's `query()`.
+
 ### Audio
 
 Synthesised entirely in Web Audio — no sample files. Mars' atmosphere is ~610 Pa
@@ -253,6 +304,9 @@ src/
   player.js             traction-limited movement
   input.js              rebindable actions, gamepad, pointer-lock fallback
   astronaut.js          crew body on a Mixamo rig
+  rig.js                procedural pose layer: two-bone IK arms/legs, crouch, spine bend
+  actions.js            punch / defend / grab / carry / throw state machine
+  interact.js           grabbable registry, loose props with Mars physics, rock adapter
   companion.js          autonomous support unit
   audio.js              Web Audio suit synthesis
   settings.js/ui        declarative settings, one schema drives menu and engine

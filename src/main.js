@@ -10,7 +10,9 @@ import { Input } from './input.js';
 import { Companion } from './companion.js';
 import { RockField } from './detail.js';
 import { LightCache } from './lightcache.js';
-import { buildSettingsUI } from './settingsui.js';
+import { buildSettingsUI, keyName } from './settingsui.js';
+import { CharacterActions, LIFT_MAX } from './actions.js';
+import { Interactables, PropSet, RockSource } from './interact.js';
 import { Intro, WreckSite, crashLayout, INTRO_LMST } from './intro/intro.js';
 import { siteTime, missionSol, season, formatSolClock, sunDirection,
          utcForSolAndLmst, JEZERO, SOL_SECONDS } from './marstime.js';
@@ -128,6 +130,7 @@ scene.add(new THREE.HemisphereLight(0xc79a6d, 0x4a2e20, 0.62 * Math.PI));
 
 const audio = new SuitAudio();
 let hf, terrain, lightCache, player, projector, waypoints, mask, astronaut, blobShadow, companion, rocks;
+let props, interactables, actions, grabMarker;
 let wreck = null, intro = null, crash = null;
 const SPAWN = { x: 0, z: 0, yaw: 2.3 };
 /* Shared with the overlay materials so the rover track bends with the ground
@@ -218,6 +221,18 @@ async function boot() {
   rocks = new RockField(hf);
   scene.add(rocks.mesh);
 
+  // Loose bodies (rocks you have picked up, dropped or knocked over) and the
+  // registry the crew member's hands search.
+  props = new PropSet(hf);
+  scene.add(props.group);
+  interactables = new Interactables().register(props).register(new RockSource(rocks, props));
+  grabMarker = new THREE.Mesh(
+    new THREE.RingGeometry(0.86, 1, 40).rotateX(-Math.PI / 2),
+    new THREE.MeshBasicMaterial({ color: 0xffc86a, transparent: true, opacity: 0.55,
+                                  depthWrite: false, toneMapped: false }));
+  grabMarker.visible = false;
+  scene.add(grabMarker);
+
   status('Waking support unit…');
   companion = await Companion.load(hf);
   companion.say = (text, ms) => {
@@ -231,6 +246,7 @@ async function boot() {
 
   player = new Player(hf);
   player.placeAt(SPAWN.x, SPAWN.z);
+  _body.pos = player.pos; _body.vel = player.vel;
   // Where the Kestrel came down, ahead of the player: the wreck is part of the
   // world whether or not the opening is watched.
   crash = crashLayout(SPAWN, SPAWN.yaw);
@@ -243,6 +259,7 @@ async function boot() {
   player.aimPitch = player.pitch = -0.05;
   player.events.footstep = (i, slope) => audio.footstep(i, slope);
   player.events.land = imp => audio.land(imp);
+  setupActions();
 
   el('elevRange').textContent = `${meta.elevMin.toFixed(1)} … ${meta.elevMax.toFixed(1)} m`;
   el('dataNote').textContent =
@@ -306,12 +323,14 @@ async function boot() {
   rocks.update(player.pos.x, player.pos.z);
   const markerWasVisible = companion.marker.visible;
   companion.marker.visible = true;
+  grabMarker.visible = true;
   try {
     // compileAsync only helps (and otherwise warns) with parallel compile support
     if (renderer.extensions.has('KHR_parallel_shader_compile')) await renderer.compileAsync(scene, camera);
     else renderer.compile(scene, camera);
   } catch (e) { console.warn('precompile', e); }
   companion.marker.visible = markerWasVisible;
+  grabMarker.visible = false;
   settingsUI = buildSettingsUI(settings, el('settings'), closeSettings, input);
   viewMode = settings.get('viewMode') === 'First Person' ? 'first' : 'third';
   settings.listeners.push((k, v) => {
@@ -339,12 +358,89 @@ async function boot() {
   if (lowPowerGPU) showNotice('Low-power GPU detected — using the Low quality preset. ESC → Settings to change it.', 7000);
   window.__mars = { THREE, scene, camera, renderer, hf, terrain, player, projector, intro, wreck, crash,
                     waypoints, astronaut, audio, mask, SETTINGS, settings, timeState, input, companion, rocks, lightCache, res,
-                    sky, sunLight, SUN_DIR,
+                    sky, sunLight, SUN_DIR, actions, props, interactables,
                     setMarsTime: (sol, lmst) => { timeState.sol = sol; timeState.lmst = lmst; },
                     get viewMode() { return viewMode; },
                     get settingsOpen() { return settingsOpen; },
                     openSettings: () => openSettings(), closeSettings: () => closeSettings() };
   requestAnimationFrame(frame);
+}
+
+/**
+ * Punch, defend, grab. The controller is generic (see actions.js); this is
+ * only the player's wiring: feedback for each event, and nothing else.
+ */
+function setupActions() {
+  actions = new CharacterActions({
+    world: interactables,
+    ground: (x, z) => hf.heightAt(x, z),
+    dims: astronaut.rig.dims,
+  });
+  const kg = m => m < 10 ? m.toFixed(1) : Math.round(m);
+  actions.events = {
+    onPunch: () => { audio.swing(1); player.exertion = Math.min(1, player.exertion + 0.04); },
+    onThrow: (p, v) => { audio.swing(1.3); player.exertion = Math.min(1, player.exertion + 0.08); },
+    onPickUp: p => {
+      audio.thud(0.4);
+      if (p.mass > LIFT_MAX * 0.5) audio.exhaleSharp();
+      player.exertion = Math.min(1, player.exertion + p.mass / LIFT_MAX * 0.25);
+    },
+    onDrop: p => audio.thud(0.3 + Math.min(1, p.mass / LIFT_MAX)),
+    onHit: ({ item, moved }) => {
+      audio.thud(0.9);
+      if (!moved) showNotice(`Solid ${item.label} — about ${kg(item.mass)} kg. It does not budge.`, 2400);
+    },
+    onStrike: ({ point }) => {
+      if (!companion) return;
+      const dx = point.x - companion.pos.x, dz = point.z - companion.pos.z;
+      const dy = point.y - (companion.pos.y + 0.9);
+      if (dx * dx + dy * dy + dz * dz > 0.8 * 0.8) return;
+      audio.thud(0.6);
+      companion.emote('No', 'Angry');
+      companion._speak('Hey! Careful with the hardware.', 2600);
+    },
+    onFail: (why, it) => {
+      if (why === 'nothing') showNotice('Nothing within reach to pick up.', 1800);
+      else if (why === 'too-big')
+        showNotice(`That ${it.label} is ${(it.radius * 2).toFixed(2)} m across — too wide to get your arms around.`, 2800);
+      else if (why === 'too-heavy') {
+        audio.exhaleSharp();
+        showNotice(`About ${kg(it.mass)} kg of basalt. Only ${kg(it.mass * MARS_G / 9.80665)} kg-force on Mars, ` +
+                   `but still too heavy to lift.`, 3200);
+      }
+    },
+  };
+  // something landing hard nearby: felt through the ground more than heard
+  props.onImpact = (p, speed) => {
+    const d = Math.hypot(p.position.x - player.pos.x, p.position.z - player.pos.z);
+    const s = Math.min(1.2, speed / 4) * Math.min(1, p.mass / 20) / (1 + d / 5);
+    if (s > 0.05) audio.thud(s);
+  };
+}
+
+/** The pick-up prompt, and a ring on the ground around what would be taken. */
+function updateActionHUD() {
+  const pr = el('actionPrompt');
+  const key = a => keyName(input.codesFor(a)[0] || input.codesFor(a)[1]);
+  const kg = m => m < 10 ? m.toFixed(1) : Math.round(m);
+  let text = '';
+  const c = player.mode === 'walk' ? actions.candidate : null;
+  if (actions.held && actions.state === 'carry') {
+    text = `<b>${key('grab')}</b> put down &nbsp; <b>${key('punch')}</b> throw &nbsp; · ${actions.held.label} ${kg(actions.held.mass)} kg`;
+  } else if (c) {
+    const heavy = c.mass > LIFT_MAX;
+    text = `<b>${key('grab')}</b> ${heavy ? 'try to lift' : 'pick up'} &nbsp; · ${c.label} ~${kg(c.mass)} kg` +
+           (heavy ? ' <i>(heavy)</i>' : '');
+  }
+  if (pr.innerHTML !== text) pr.innerHTML = text;
+  pr.classList.toggle('show', !!text);
+
+  grabMarker.visible = !!c;
+  if (c) {
+    grabMarker.position.set(c.position.x, hf.heightAt(c.position.x, c.position.z) + 0.03, c.position.z);
+    grabMarker.scale.setScalar(c.radius + 0.12);
+    grabMarker.material.color.setHex(c.mass > LIFT_MAX ? 0xe06a4a : 0xffc86a);
+  }
 }
 
 /**
@@ -538,10 +634,11 @@ function pollActions() {
   }
   if (input.consume('surveyMode')) {
     player.mode = player.mode === 'walk' ? 'fly' : 'walk';
+    actions.dropNow();                     // nobody flies off with a boulder
     if (player.mode === 'walk') { player.vel.set(0, 0, 0); player.pos.y = hf.heightAt(player.pos.x, player.pos.z); }
     audio.beep('mode');
   }
-  if (input.consume('respawn')) { player.placeAt(0, 0); audio.beep('ok'); }
+  if (input.consume('respawn')) { actions.dropNow(); player.placeAt(0, 0); audio.beep('ok'); }
   if (input.consume('roverTrack')) settings.set('roverTrack', !settings.get('roverTrack'));
   if (input.consume('gapOverlay')) { settings.set('gapOverlay', !settings.get('gapOverlay')); audio.beep('mode'); }
   if (input.consume('headBob')) { settings.set('headBob', !settings.get('headBob')); audio.beep('mode'); }
@@ -568,6 +665,12 @@ function pollActions() {
         `On my way — ${Math.round(Math.hypot(player.pos.x - companion.pos.x, player.pos.z - companion.pos.z))} m out.`, 3600);
     }
     audio.beep('ok');
+  }
+  // Character actions only exist on foot.
+  const punch = input.consume('punch'), grab = input.consume('grab');
+  if (player.mode === 'walk') {
+    if (punch) actions.punch();
+    if (grab) actions.grab();
   }
   if (input.consume('cycleRT')) {
     const tiers = ['Off', 'Low', 'Medium', 'High', 'Ultra'];
@@ -625,6 +728,7 @@ function updateMarsTimeAndSun(dt) {
 }
 
 const _fwd = new THREE.Vector3(), _right = new THREE.Vector3();
+const _body = { pos: null, vel: null, yaw: 0, aimYaw: 0 };   // what CharacterActions acts from
 const _pivot = new THREE.Vector3(), _desired = new THREE.Vector3(), _probe = new THREE.Vector3();
 
 function updateCamera(dt) {
@@ -681,25 +785,47 @@ function frame() {
   }
 
   updateMarsTimeAndSun(dt);
+  input.pollPad();
   pollActions();
   const look = input.consumeLook();
   if (look.x || look.y) player.applyMouse(look.x, look.y);
-  player.update(dt, input.state());
+  // What the hands are doing limits the legs: no sprinting with a boulder.
+  const st = input.state();
+  actions.setDefend(player.mode === 'walk' && input.isDown('defend'));
+  if (player.mode === 'walk') {
+    st.axisX *= actions.moveScale; st.axisY *= actions.moveScale;
+    if (!actions.canSprint) st.sprint = false;
+    if (!actions.canJump) st.jump = false;
+  }
+  player.update(dt, st);
   if (wreck && wreck.pushOut(player.pos)) { player.vel.multiplyScalar(0.5); }
   audio.update(dt, player.exertion);
 
-  // body turns toward travel when moving, toward the view when idle
+  // Body turns toward travel when moving, toward the view when idle, and
+  // squares up to whatever an action is aimed at. In first person nobody sees
+  // the body, but the hands still work from it, so it follows the view.
   const hs = Math.hypot(player.vel.x, player.vel.z);
-  const wantYaw = hs > 0.25 ? Math.atan2(player.vel.x, player.vel.z) : player.yaw;
+  const facing = viewMode === 'first' ? player.yaw : actions.faceYaw;
+  const wantYaw = facing ?? (hs > 0.25 ? Math.atan2(player.vel.x, player.vel.z) : player.yaw);
   let d = (wantYaw - bodyYaw) % (Math.PI * 2);
   if (d > Math.PI) d -= Math.PI * 2; if (d < -Math.PI) d += Math.PI * 2;
-  bodyYaw += d * Math.min(1, dt * (hs > 0.25 ? 7 : 3));
+  bodyYaw += d * Math.min(1, dt * (facing != null ? 10 : hs > 0.25 ? 7 : 3));
+
+  _body.yaw = bodyYaw; _body.aimYaw = player.yaw;
+  actions.update(dt, _body);
+  // Stepping in to pick something up: short, slow paces the gait can follow.
+  if (actions.stepTo && player.onGround) {
+    const dx = actions.stepTo.x - player.pos.x, dz = actions.stepTo.z - player.pos.z;
+    const dd = Math.hypot(dx, dz), sp = Math.min(0.9, Math.max(0.35, dd * 3));
+    if (dd > 0.02) { player.vel.x = dx / dd * sp; player.vel.z = dz / dd * sp; }
+  }
+  props.update(dt);
 
   astronaut.root.position.set(player.pos.x, player.pos.y, player.pos.z);
   astronaut.root.rotation.y = bodyYaw;
   // Nobody sees the crew body in first person or survey mode; skip the skinning.
   if (viewMode === 'third' && player.mode !== 'fly')
-    astronaut.animate(dt, player.gaitPhase, player.speed01, !player.onGround, player.lean);
+    astronaut.animate(dt, player.gaitPhase, player.speed01, !player.onGround, player.lean, actions.pose);
 
   const gy = hf.heightAt(player.pos.x, player.pos.z);
   blobShadow.position.set(player.pos.x, gy + 0.03, player.pos.z);
@@ -718,6 +844,7 @@ function frame() {
   if (wreck) wreck.update(dt);
   if (intro) intro.updateAfter(dt);
   updateCompanionBubble();
+  updateActionHUD();
   sky.position.copy(camera.position);
   sky.scale.setScalar(camera.far * 0.45);
   if (camera.fov !== SETTINGS.view.fov) { camera.fov = SETTINGS.view.fov; camera.updateProjectionMatrix(); }
