@@ -42,6 +42,55 @@
     transition:background .18s ease,border-color .18s ease}
   #startBtn:hover{background:rgba(60,34,20,.85);border-color:#e0a870}
 
+
+  /* ------------------------------------------------------------ cinematic */
+  #cine{position:fixed;inset:0;z-index:35;pointer-events:none;color:#f3e6d6;
+    font-family:"Avenir Next","Segoe UI","Helvetica Neue",Arial,sans-serif}
+  #cine.off{display:none}
+  #cine .cbar{position:absolute;left:0;right:0;height:0;background:#000;transition:height 1.6s cubic-bezier(.6,0,.2,1)}
+  #cine .cbar.top{top:0} #cine .cbar.bot{bottom:0}
+  #cine.bars .cbar{height:11vh}
+  #cineFade,#cineFlash{position:absolute;inset:0;opacity:0}
+  #cineFade{background:#000;opacity:1} #cineFlash{background:#fff7ec;mix-blend-mode:screen}
+  #cineGrain{position:absolute;inset:-50%;opacity:0;background-size:180px 180px;animation:grain .5s steps(4) infinite}
+  @keyframes grain{0%{transform:translate(0,0)}25%{transform:translate(-7%,4%)}50%{transform:translate(5%,-6%)}75%{transform:translate(-3%,7%)}100%{transform:translate(6%,2%)}}
+  #cineVig{position:absolute;inset:0;opacity:0;background:radial-gradient(ellipse at center,rgba(0,0,0,0) 55%,rgba(0,0,0,.55) 100%)}
+  #cineOpen{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;
+    font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace;font-size:13px;letter-spacing:.32em;color:#d9c6b0}
+  #cineOpen div{min-height:1.4em;text-align:center;padding:0 24px}
+  #cineTitle{position:absolute;left:0;right:0;top:38%;text-align:center;opacity:0;transition:opacity 2.4s ease, letter-spacing 9s ease}
+  #cineTitle h1{font-weight:200;font-size:clamp(34px,7vw,92px);letter-spacing:.42em;margin-right:-.42em;color:#fff4e6;
+    text-shadow:0 0 30px rgba(255,170,110,.35)}
+  #cineTitle h2{margin-top:18px;font-weight:300;font-size:clamp(10px,1.2vw,14px);letter-spacing:.6em;color:#d4a985}
+  #cineTitle.show{opacity:1}
+  #cineSub{position:absolute;left:50%;bottom:calc(11vh + 26px);transform:translateX(-50%);width:min(860px,88vw);text-align:center;
+    font-size:clamp(14px,1.6vw,20px);line-height:1.5;opacity:0;transition:opacity .45s ease;text-shadow:0 2px 6px #000,0 0 2px #000}
+  #cineSub.show{opacity:1}
+  #cineSub b{color:#7fe3ff;font-weight:600;letter-spacing:.12em;margin-right:.6em;font-size:.8em}
+  #cineWarn{position:absolute;top:calc(11vh + 22px);left:50%;transform:translateX(-50%);padding:10px 26px;
+    border:1px solid #ff4a32;background:rgba(80,6,0,.55);color:#ffb3a3;font-family:"SF Mono",ui-monospace,monospace;
+    font-size:13px;letter-spacing:.26em;opacity:0;white-space:nowrap}
+  #cineWarn.show{animation:warn .55s steps(2) infinite}
+  @keyframes warn{0%{opacity:1}100%{opacity:.25}}
+  #cineStamp{position:absolute;left:calc(4vw + 8px);bottom:calc(11vh + 24px);font-family:"SF Mono",ui-monospace,monospace;
+    font-size:12px;letter-spacing:.28em;color:#e8c9a8;line-height:1.9;text-shadow:0 1px 4px #000}
+  .ccard{position:absolute;width:300px;padding:18px 20px 20px;color:#eef3ff;opacity:0;transition:opacity 1.2s ease;
+    background:linear-gradient(180deg,rgba(84,104,150,.55),rgba(40,52,96,.58));
+    clip-path:polygon(14px 0,calc(100% - 14px) 0,100% 14px,100% calc(100% - 14px),calc(100% - 14px) 100%,46px 100%,46px calc(100% - 14px),0 calc(100% - 14px),0 14px);
+    box-shadow:inset 0 0 0 1px rgba(120,160,255,.6)}
+  .ccard.mars{background:linear-gradient(180deg,rgba(150,84,52,.58),rgba(90,40,22,.62));box-shadow:inset 0 0 0 1px rgba(255,150,100,.6)}
+  .ccard h3{font-size:30px;font-weight:700;letter-spacing:.02em;text-shadow:0 2px 8px rgba(0,0,0,.6);margin-bottom:10px}
+  .ccard p{font-size:14px;line-height:1.5;text-shadow:0 1px 4px rgba(0,0,0,.7)}
+  .ccard.show{opacity:1}
+  .creticle{position:absolute;width:34px;height:34px;margin:-17px 0 0 -17px;border:1px solid rgba(200,220,255,.8);border-radius:50%;
+    opacity:0;transition:opacity 1s ease}
+  .creticle.show{opacity:1}
+  #cineSkip{position:absolute;right:calc(3vw + 6px);bottom:calc(5.5vh - 7px);pointer-events:auto;cursor:pointer;
+    font-family:"SF Mono",ui-monospace,monospace;font-size:10px;letter-spacing:.24em;color:#a99482;
+    display:flex;align-items:center;gap:10px;opacity:.75;background:none;border:0}
+  #cineSkip i{display:block;width:70px;height:2px;background:rgba(255,255,255,.15);position:relative}
+  #cineSkip i::after{content:"";position:absolute;left:0;top:0;bottom:0;width:var(--p,0%);background:#ffd27a}
+
   /* ---------------------------------------------------------------- HUD */
   #hud{position:fixed;inset:0;z-index:10;pointer-events:none;
     font-size:11px;letter-spacing:.05em}
@@ -261,11 +310,27 @@
 <div id="startOverlay" class="hidden">
   <div class="start-card">
     <button id="startBtn">CLICK TO EXPLORE</button>
-    <p>Mouse look needs pointer lock. If your browser refuses it,
+    <p id="startHint">Mouse look needs pointer lock. If your browser refuses it,
        hold the left mouse button and drag to look instead — both work.</p>
     <p class="keys"><b>WASD</b> move &middot; <b>SHIFT</b> run &middot; <b>SPACE</b> jump &middot;
        <b>V</b> view &middot; <b>ESC</b> settings</p>
   </div>
+</div>
+
+
+<div id="cine" class="off">
+  <div id="cineFade"></div>
+  <div id="cineVig"></div>
+  <div id="cineGrain"></div>
+  <div id="cineCards"></div>
+  <div id="cineOpen"><div></div><div></div><div></div></div>
+  <div id="cineTitle"><h1>MARTIAN STORY</h1><h2>PART ONE &nbsp;·&nbsp; THE LAST APPROACH</h2></div>
+  <div id="cineWarn"></div>
+  <div id="cineStamp"></div>
+  <div id="cineSub"><b></b><span></span></div>
+  <div class="cbar top"></div><div class="cbar bot"></div>
+  <button id="cineSkip" type="button">HOLD SPACE TO SKIP <i></i></button>
+  <div id="cineFlash"></div>
 </div>
 
 <div id="settings"></div>
