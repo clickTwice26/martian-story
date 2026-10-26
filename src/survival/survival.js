@@ -574,7 +574,7 @@ export class Survival {
     if (!this.running) return;
     const sunEl = ctx.sunElevation ?? 0;
     this._animate(dt, sunEl);
-    this._updateRadio(dt);
+    this._updateRadio();
     if (this.ending) { this._updateEnding(dt); this._updateHUD(dt, ctx); return; }
     if (this.journalOpen || this.paused) { this._updateHUD(dt, ctx); return; }
 
@@ -1022,7 +1022,7 @@ export class Survival {
         <h3><span id="svAct">MISSION</span><span id="svScore"></span></h3>
         <div id="svTitle"></div><div id="svTag"></div>
         <ul id="svObjs"></ul>
-        <div id="svHint"><b>J</b> journal &nbsp; <b>E</b> use / pick up</div>
+        <div id="svHint"><b>E</b> use / pick up &nbsp; <b>J</b> journal &nbsp; <b>H</b> call K-7 &nbsp; <b>V</b> view &nbsp; <b>ESC</b> settings</div>
       </div>
       <div class="panel" id="svLife"><h3><span>LIFE SUPPORT</span><span id="svSol"></span></h3><div id="svRows"></div></div>
       <div id="svMarker"><div class="dia"></div><span></span></div>
@@ -1219,9 +1219,11 @@ export class Survival {
     setTimeout(() => f.remove(), 2200);
   }
 
-  _updateRadio(dt) {
-    const box = el('svComms');
-    this._radioT -= dt;
+  _updateRadio() {
+    // wall-clock, so a slow frame rate cannot stretch a line into minutes
+    const box = el('svComms'), now = performance.now() / 1000;
+    this._radioT -= now - (this._radioLast ?? now);
+    this._radioLast = now;
     if (this._radioT > 0) return;
     const next = this.radio.shift();
     if (!next) { box.classList.remove('show'); return; }
