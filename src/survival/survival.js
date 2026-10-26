@@ -223,6 +223,7 @@ export class Survival {
     document.body.classList.add('story');
     if (this.wreck) this.wreck.age = Math.max(this.wreck.age, 380);   // a night later: smouldering
     this.showZone('base'); this.showZone('ore');
+    if (this.companion) this.companion._greeted = true;
     if (!this.saved?.done) this._placeCapsule();
     const d = this.saved;
     if (d) {
@@ -318,6 +319,7 @@ export class Survival {
     mesh.rotation.y = hash01(home.x, home.z) * Math.PI;
     const prop = new Prop({ mesh, mass: def.mass, radius, restOffset: halfHeight, kind: 'crate', label: def.label });
     prop.crateId = id;
+    prop.story = true;
     this.props.add(prop);
     this.crates[id] = { id, prop };
   }
@@ -429,6 +431,59 @@ export class Survival {
     this.modules.reactor = r;
   }
 
+  /** Light-toned, sulfate-bearing blocks in the outcrop: the water ore. */
+  spawnOre() {
+    if (this._oreSpawned) return;
+    this._oreSpawned = true;
+    const geo = new THREE.IcosahedronGeometry(1, 1);
+    const pos = geo.attributes.position;
+    for (let i = 0; i < pos.count; i++) {
+      const k = 0.8 + 0.35 * hash01(i * 3.1, i * 7.7);
+      pos.setXYZ(i, pos.getX(i) * k, pos.getY(i) * k * 0.72, pos.getZ(i) * k);
+    }
+    geo.computeVertexNormals();
+    const mat = new THREE.MeshStandardMaterial({ color: 0xd9c4a0, roughness: 0.92, metalness: 0 });
+    const O = this.anchors.ore;
+    for (let i = 0; i < 24; i++) {
+      const a = hash01(i, 3.3) * Math.PI * 2, r = Math.sqrt(hash01(i, 9.1)) * (this.ORE_R - 1.5);
+      const x = O.x + Math.cos(a) * r, z = O.z + Math.sin(a) * r;
+      const s = 0.13 + 0.1 * hash01(i, 5.7);
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.scale.set(s, s, s);
+      mesh.rotation.set(hash01(i, 1) * 3, hash01(i, 2) * 6, hash01(i, 4) * 3);
+      mesh.castShadow = mesh.receiveShadow = true;
+      const half = s * 0.72;
+      mesh.position.set(x, this.hf.heightAt(x, z) + half * 0.8, z);
+      const mass = 2300 * 4.19 * s * s * s * 0.62;       // sulfate-cemented mudstone, ~2.3 t/m^3
+      const p = new Prop({ mesh, mass, radius: s, restOffset: half * 0.8, kind: 'rock', label: 'hydrated sulfate' });
+      p.grade = 0.04 + 0.16 * hash01(i, 11.3);
+      p.story = true;
+      this.props.add(p);
+    }
+  }
+
+  /** Regolith bags K-7 filled overnight, stacked beside camp for the berm. */
+  spawnBags() {
+    if (this._bagsSpawned) return;
+    this._bagsSpawned = true;
+    const need = Math.ceil(Math.max(0, this.SHIELD_KG - this.c.shieldKg) / 25);
+    const geo = new THREE.BoxGeometry(0.62, 0.26, 0.42);
+    const mat = new THREE.MeshStandardMaterial({ color: 0xb07a52, roughness: 1, metalness: 0 });
+    const B = this.anchors.base;
+    for (let i = 0; i < need; i++) {
+      const lx = -4 + (i % 3) * 0.8, lz = -10.5 + Math.floor(i / 3) * 0.7;
+      const x = B.x + this.right.x * lx + this.fwd.x * lz, z = B.z + this.right.z * lx + this.fwd.z * lz;
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.rotation.y = this.baseYaw + (hash01(i, 2) - 0.5) * 0.5;
+      mesh.position.set(x, this.hf.heightAt(x, z) + 0.13, z);
+      mesh.castShadow = mesh.receiveShadow = true;
+      const p = new Prop({ mesh, mass: 25, radius: 0.31, restOffset: 0.13, kind: 'rock', label: 'regolith bag' });
+      p.grade = 0;
+      p.story = true;
+      this.props.add(p);
+    }
+  }
+
   towReactor() {
     this.reactorState = 'towing';
     this.say([['K-7', 'Clamps free. Towing. Walk with me — it is 80 metres.']]);
@@ -469,6 +524,7 @@ export class Survival {
     this.scene.add(this.plume.mesh, this.smoke.mesh);
     this.actions.dropNow();
     this._hideTop(true);
+    this._checkObjectives();
   }
 
   say(lines) { for (const [who, text] of lines || []) this.radio.push({ who, text }); }
@@ -490,35 +546,26 @@ export class Survival {
   /** E pressed. Returns true if a station used it (so the hands do not grab). */
   interact() {
     if (!this.running || this.ending || this.journalOpen) return false;
-    if (this.actions.state === 'carry' || this.actions.candidate) return false;
+    if (this.actions.state === 'carry' || this.actions.candidate?.story) return false;
     const s = this._station;
     if (!s) return false;
     s.use(this);
     return true;
   }
 
-  noteGrab(candidate) { this._lastCand = candidate || null; }
-
   onPickUp(prop) {
     if (prop.kind === 'rock' && prop.grade === undefined) {
-      const c = this._lastCand;
-      const p = c ? c.position : prop.position;
-      prop.grade = this.gradeAt(p.x, p.z);
-      if (prop.grade > 0) prop.label = 'hydrated sulfate';
+      prop.grade = 0;                       // field rock: olivine basalt, dry
     }
   }
 
-  gradeAt(x, z) {
-    const o = this.anchors.ore;
-    if (Math.hypot(x - o.x, z - o.z) > this.ORE_R) return 0;
-    return 0.04 + 0.16 * hash01(Math.round(x * 50), Math.round(z * 50));
-  }
+
 
   /** Extra words for the pick-up prompt. */
   describe(it) {
     if (!this.running || !it) return '';
-    if (it.kind === 'rock' && (this.flag.oreOpen || this.m >= 5)) {
-      const g = it.grade ?? this.gradeAt(it.position.x, it.position.z);
+    if (it.kind === 'rock' && it.label !== 'regolith bag' && (this.flag.oreOpen || this.m >= 5)) {
+      const g = it.grade ?? 0;
       return g > 0 ? ` · <span style="color:#7fe3ff">sulfate, ${(g * 100).toFixed(0)}% water → ${(it.mass * g * RECOVERY).toFixed(1)} L</span>`
                    : ' · <span style="color:#9a7c66">basalt, dry</span>';
     }
@@ -805,8 +852,8 @@ export class Survival {
       const d = Math.hypot(this.player.pos.x - p.x, this.player.pos.z - p.z);
       if (d <= (s.r || 3.5) && d < bd) { bd = d; best = s; }
     }
-    this._station = this.actions.state === 'carry' || this.actions.candidate ? null : best;
-    this.prompt = this.job ? '' : best ? best.label(this) : '';
+    this._station = this.actions.state === 'carry' || this.actions.candidate?.story ? null : best;
+    this.prompt = this.job || !this._station ? '' : this._station.label(this);
   }
 
   _globalStations() {
@@ -1334,7 +1381,7 @@ export class Survival {
     this.ending = null;
     this._hideTop(false);
     const cap = this.modules.capsule;
-    if (cap) { cap.visible = false; this.modules.capsule = null; }
+    if (cap) { cap.visible = false; delete this.modules.capsule; }
     for (const p of [this.plume, this.smoke]) if (p) { this.scene.remove(p.mesh); }
     this.onJournal?.(false);
     this._renderMission();

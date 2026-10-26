@@ -57,7 +57,8 @@ Settings → Pages → *Deploy from a branch* → `main`, folder `/ (root)`. Eve
 | `H` | call the support unit · `SHIFT+H` heel / roam |
 | `Q` / left click | punch (press again for a jab–cross combo) · throw what you are carrying |
 | `X` / right click | defend — hold to keep the guard up |
-| `E` | grab the rock in front of you · press again to put it down |
+| `E` | use what you face (refill, build, rest…) · grab the rock or crate in front of you · press again to put it down |
+| `J` | mission journal: objectives, stats, badges, the science you have unlocked |
 | `,` `.` | time of sol · `ESC` settings |
 | `SPACE` (hold) / `ESC` | skip the opening cinematic |
 
@@ -96,6 +97,39 @@ coordinates, Jezero included), the ship is built from primitives and a painted
 canvas, and the score is synthesised in Web Audio. Acts I–II render through a
 small HDR post chain (mip-chain bloom, ACES, grade, vignette, grain, lens flare)
 that costs less than a gameplay frame; act III is the game's own renderer.
+
+### Part Two: Survive Jezero
+
+After the crash the game becomes a survival campaign of **14 missions in five
+acts**, built on the numbers in the
+[research report](reports/Mars%20survival%20resources%20from%20NASA%20data.md).
+Turn it off under Settings → World → Story Missions. Progress is saved in the
+browser; press `R` twice in the journal to start over.
+
+| Act | Missions | What you do, and the science behind it |
+|---|---|---|
+| I | First Breath · Salvage · Shelter · Sunlight | Refill a failing suit (0.84 kg O₂ per person per sol), haul crates under 0.38 g, inflate the habitat and bury it under regolith (a thin layer is *worse* than none: secondary neutrons), deploy a solar array whose output follows the real Mars24 sun |
+| II | Make Air · No Ice Here · Poison in the Water · Green | Run a MOXIE-style CO₂ electrolyser; learn there is no ice at 18°N and bake water out of hydrated sulfate instead (NASA M-WIP study grades, 50% recovery from NASA Glenn tests); remove perchlorate; grow food hydroponically |
+| III | Dust Storm · Fission | Ride out a regional storm on a starving battery; tow the Kestrel's 10 kWe reactor out to 80 m — NASA's 2024 choice for Mars surface power |
+| IV | Cargo from Home · The Way Home · Full Tanks | Recover a resupply pod; install a Sabatier reactor (each tonne of methane costs 2.25 t of water) and run the plant for ~300 sols, fixing dust and jammed augers |
+| V | Ascent | Launch on Martian propellant. K-7 stays behind. |
+
+**The life-support budget runs for real.** While the story plays, the Mars clock
+runs at 60× (a Mars minute per second), so day and night, the sun's elevation and
+with it the solar output all follow Mars24 at Jezero. The HUD tracks suit and
+habitat oxygen, battery and generation, water, food, outside temperature (from
+Perseverance's MEDA ranges) and **radiation dose against NASA's 600 mSv career
+limit** — you arrive with 390 mSv already, 212 days of cruise at Curiosity RAD's
+1.84 mSv/day. Resting in the habitat skips time, integrating the same budget in
+quarter-hour steps against the real sun.
+
+Every mission ends with a *science unlocked* card naming its NASA or peer-reviewed
+source, collected in the journal. Values scaled for play are labelled there: the
+O₂ stack is a 10× MOXIE (120 g/h on 3 kW, MOXIE's own energy ratio), the array is
+60 m², ore grades span the M-WIP study's 4–20% range, and the propellant load is
+for a small pod. Points, ranks (Castaway → Ares Legend) and eight badges reward
+doing it well — under the dose limit, without a blackout, with the battery alive
+through the storm.
 
 ---
 
@@ -365,6 +399,11 @@ src/
     particles.js        instanced billboard particles and ballistic debris
     post.js             HDR bloom + grade composite for the space acts
     score.js            synthesised score and Mars-correct sound design
+  survival/
+    campaign.js         Part Two's 14 missions: objectives, K-7's lines, science cards and sources
+    survival.js         life-support budget, stations, crates, rest / time skip, HUD, journal, save
+    models.js           procedural hab, berm, solar array, O2 plant, oven, greenhouse, reactor, pod
+reports/, research_notes/  the NASA survival research the campaign is built on
 data/                   baked NASA tiles + rover traverse
 tools/                  the range-request extractors, and make_figures.py
 docs/figures/           reference figures for the data and algorithms (light / dark)

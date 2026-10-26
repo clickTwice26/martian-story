@@ -99,7 +99,8 @@ export const MISSIONS = [
         say: [['K-7', 'Habitat holding pressure. It carries six kilograms of oxygen — about a week. Step inside the ring to breathe from it and refill your suit.']] },
       { text: S => `Pile rock on the berm — throw or carry rocks next to the hab`, at: 'base',
         progress: S => [S.c.shieldKg, S.SHIELD_KG, 'kg'], done: S => S.c.shieldKg >= S.SHIELD_KG,
-        enter: S => { S.flag.shieldOpen = true; } },
+        enter: S => { S.flag.shieldOpen = true; S.spawnBags(); },
+        say: [['K-7', 'I filled regolith bags overnight — they are stacked behind the hab. Carry or throw them onto the berm. Loose rock counts too.']] },
     ],
     onComplete: S => { S.flag.shieldOpen = false; },
     fact: {
@@ -117,7 +118,7 @@ export const MISSIONS = [
     tagline: 'Mars gets 43% of Earth’s sunlight. The sun in this sky is the real one.',
     points: 250,
     brief: [
-      ['K-7', 'Deploy the solar array on the pad west of the hab. It tracks the sun — the actual sun position at Jezero, from NASA’s Mars24 algorithm.'],
+      ['K-7', 'Deploy the solar array on the pad beside the hab. It tracks the sun — the actual sun position at Jezero, from NASA’s Mars24 algorithm.'],
     ],
     stations: [
       { id: 'deploySolar', at: 'solar', r: 6, when: S => !S.built.solar && !S.job,
@@ -175,7 +176,7 @@ export const MISSIONS = [
       ['K-7', 'The nearest confirmed shallow ice is at 35°N, about a thousand kilometres north. Perseverance’s radar sees solid rock beneath us.'],
       ['K-7', 'But some rocks here hold water in their crystals — hydrated sulfates. I marked an outcrop. Bake them at 150 °C and the water comes out.'],
     ],
-    setup: S => { S.spawnCrate('oven'); S.showZone('ore'); },
+    setup: S => { S.spawnCrate('oven'); S.spawnOre(); },
     stations: [
       { id: 'setupOven', at: 'oven', r: 5, when: S => S.delivered('oven') && !S.built.oven && !S.job,
         label: () => 'Set up the oven', use: S => S.startJob('Bolting the oven to the plant', 6, 'oven', () => S.build('oven')) },
@@ -186,7 +187,7 @@ export const MISSIONS = [
       { text: 'Bake 5 L of water: carry rocks from the sulfate outcrop into the oven', at: S => S.carryingRock() ? 'oven' : 'ore',
         progress: S => [S.res.waterRaw + S.c.waterPurified, 5, 'L'], done: S => S.res.waterRaw + S.c.waterPurified >= 5,
         enter: S => { S.flag.oreOpen = true; },
-        say: [['K-7', 'Look at a rock before you lift it: I read its water content with the laser spectrometer. Grey basalt is dry — don’t waste the trip.']] },
+        say: [['K-7', 'Take the pale, light-toned blocks inside the blue ring — that is the sulfate. I read each one’s water with the laser spectrometer before you lift it. Dark basalt is dry.']] },
     ],
     fact: {
       title: 'Where the water is — and is not',
@@ -207,7 +208,7 @@ export const MISSIONS = [
       ['K-7', 'Do not drink that. The regolith here carries about 2% chlorine as chlorides and perchlorates. Perchlorate blocks your thyroid.'],
       ['K-7', 'The purifier is in the bay. Distil, then polish. Set it next to the oven.'],
     ],
-    setup: S => { S.spawnCrate('purifier'); },
+    setup: S => { S.spawnCrate('purifier'); S.spawnOre(); },
     stations: [
       { id: 'setupPurifier', at: 'purifier', r: 5, when: S => S.delivered('purifier') && !S.built.purifier && !S.job,
         label: () => 'Install the purifier', use: S => S.startJob('Plumbing the distillation column', 6, 'purifier', () => S.build('purifier')) },

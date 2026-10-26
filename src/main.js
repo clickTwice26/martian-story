@@ -440,15 +440,17 @@ function updateActionHUD() {
   const key = a => keyName(input.codesFor(a)[0] || input.codesFor(a)[1]);
   const kg = m => m < 10 ? m.toFixed(1) : Math.round(m);
   let text = '';
-  const c = player.mode === 'walk' ? actions.candidate : null;
+  // A story station (inflate, refill, rest...) takes E unless a story item is in reach.
+  const station = survival && player.mode === 'walk' && actions.state !== 'carry' ? survival.prompt : '';
+  const c = player.mode === 'walk' && !station ? actions.candidate : null;
   if (actions.held && actions.state === 'carry') {
     text = `<b>${key('grab')}</b> put down &nbsp; <b>${key('punch')}</b> throw &nbsp; · ${actions.held.label} ${kg(actions.held.mass)} kg`;
+  } else if (station) {
+    text = `<b>${key('grab')}</b> ${station}`;
   } else if (c) {
     const heavy = c.mass > LIFT_MAX;
     text = `<b>${key('grab')}</b> ${heavy ? 'try to lift' : 'pick up'} &nbsp; · ${c.label} ~${kg(c.mass)} kg` +
            (heavy ? ' <i>(heavy)</i>' : '') + (survival ? survival.describe(c) : '');
-  } else if (survival && survival.prompt && player.mode === 'walk') {
-    text = `<b>${key('grab')}</b> ${survival.prompt}`;
   }
   if (pr.innerHTML !== text) pr.innerHTML = text;
   pr.classList.toggle('show', !!text);
@@ -691,10 +693,7 @@ function pollActions() {
   const punch = input.consume('punch'), grab = input.consume('grab');
   if (player.mode === 'walk' && !(survival && (survival.paused || survival.ending))) {
     if (punch) actions.punch();
-    if (grab && !(survival && survival.interact())) {
-      survival?.noteGrab(actions.candidate);
-      actions.grab();
-    }
+    if (grab && !(survival && survival.interact())) actions.grab();
   }
   if (input.consume('journal') && survival && survival.running) survival.toggleJournal();
   if (input.consume('cycleRT')) {
