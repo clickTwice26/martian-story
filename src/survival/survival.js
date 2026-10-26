@@ -21,7 +21,7 @@ import { MISSIONS, CRATES, OPENING, BADGES, RANKS } from './campaign.js';
  *   0.67 mSv surface dose, 1.84 mSv cruise dose, 586 W/m^2 sunlight,
  *   MOXIE 12 g/h on 300 W, 98% water recovery (ISS).
  * Scaled for play (and labelled so in the journal): the 10x MOXIE stack,
- * the 40 m^2 array, the oven's per-rock grade, the berm mass.
+ * the 60 m^2 array, the oven's per-rock grade, the berm mass.
  */
 
 const RATE = 60;                       // Mars seconds per real second while playing
@@ -36,9 +36,9 @@ const DOSE_SURFACE = 0.67;             // mSv/sol, Curiosity RAD
 const DOSE_CRUISE_START = 212 * 1.84;  // the transfer so far: 390 mSv
 const DOSE_LIMIT = 600;                // NASA career limit (2022)
 const SOLAR_W_M2 = 586.2;              // top of atmosphere, NASA fact sheet
-const PV_AREA = 40, PV_EFF = 0.29, PV_CLEAR = 0.75;
+const PV_AREA = 60, PV_EFF = 0.29, PV_CLEAR = 0.75;
 const BATTERY_CAP = 40;                // kWh
-const HAB_LOAD = 0.5, GREEN_LOAD = 1.2, O2_LOAD = 3.0, ISRU_LOAD = 3.5;   // kW
+const HAB_LOAD = 0.5, GREEN_LOAD = 0.5, O2_LOAD = 3.0, ISRU_LOAD = 3.5;   // kW (grow lights averaged over a photoperiod)
 const O2_RATE = 0.120;                 // kg/h: a 10x MOXIE (MOXIE peak 12 g/h)
 const HAB_O2_START = 6, HAB_O2_CAP = 12;
 const OVEN_KWH_PER_L = 1.2;            // M-WIP gypsum case, ~1.2 kWh per kg water
@@ -740,23 +740,22 @@ export class Survival {
 
   _towing(dt) {
     if (this.reactorState !== 'towing') return;
+    // The sled always reaches the site at a walking pace, even if K-7 is called
+    // away: a story object must never strand on the way.
     const r = this.modules.reactor, dest = this.anchors.reactor, c = this.companion;
-    let tx, tz;
-    if (c && c.root.visible) {
-      // the sled trails 3.5 m behind K-7
-      const dx = r.position.x - c.pos.x, dz = r.position.z - c.pos.z, d = Math.hypot(dx, dz) || 1;
-      tx = c.pos.x + dx / d * 3.5; tz = c.pos.z + dz / d * 3.5;
-      if (d < 3.5) { tx = r.position.x; tz = r.position.z; }
-      if (Math.hypot(c.pos.x - dest.x, c.pos.z - dest.z) < 3.5) { tx = dest.x; tz = dest.z; }
-    } else { tx = dest.x; tz = dest.z; }
-    const dx = tx - r.position.x, dz = tz - r.position.z, d = Math.hypot(dx, dz);
-    const step = Math.min(d, dt * 2.6);
+    const dx = dest.x - r.position.x, dz = dest.z - r.position.z, d = Math.hypot(dx, dz);
+    const step = Math.min(d, dt * 2.2);
     if (d > 1e-3) {
       r.position.x += dx / d * step; r.position.z += dz / d * step;
       r.rotation.y = Math.atan2(dx, dz);
     }
     r.position.y = this.hf.heightAt(r.position.x, r.position.z);
-    if (Math.hypot(r.position.x - dest.x, r.position.z - dest.z) < 0.3) {
+    // K-7 walks just ahead of the sled, as if hauling it
+    if (c && c.root.visible && !c.heel && d > 4) {
+      c.target.set(r.position.x + dx / d * 3.5, 0, r.position.z + dz / d * 3.5);
+      if (c.mode !== 'goto') { c.poi = { key: 'tow', x: dest.x, z: dest.z, tease: '', call: 'Reactor site', detail: 'Reactor parked. Distance and the ground between us are the shielding.', emote: 'ThumbsUp' }; c._setMode('goto'); }
+    }
+    if (d < 0.3) {
       this.reactorState = 'site';
       r.position.copy(dest);
       this._save();

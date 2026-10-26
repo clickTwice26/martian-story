@@ -118,14 +118,14 @@ export function makeBerm() {
   return m;
 }
 
-/** Solar array: four 2 x 5 m panels on a single-axis tracker. 40 m^2. */
+/** Solar array: four 2 x 7.5 m panels on a single-axis tracker. 60 m^2. */
 export function makeSolarArray() {
   const g = new THREE.Group();
   const tracker = new THREE.Group();
   tracker.position.y = 1.4;
   g.add(tracker);
   for (let i = 0; i < 4; i++) {
-    const p = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.05, 5.0), PANEL);
+    const p = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.05, 7.5), PANEL);
     p.position.set((i - 1.5) * 2.15, 0, 0);
     tracker.add(p);
     const post = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.08, 1.4, 8), GREY);

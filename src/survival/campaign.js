@@ -70,9 +70,9 @@ export const MISSIONS = [
       { text: 'Bring the habitat pack to camp', at: S => S.crateTarget('hab'), done: S => S.delivered('hab') },
       { text: 'Bring the solar array cassette to camp', at: S => S.crateTarget('solar'), done: S => S.delivered('solar') },
       { text: 'Bring the ration crate to camp', at: S => S.crateTarget('food'), done: S => S.delivered('food'),
-        say: [['K-7', 'Last one: food. Thirty sols of rations, and twelve litres of water packed in with them.']] },
+        say: [['K-7', 'Last one: food. Thirty sols of rations, and fifteen litres of water packed in with them.']] },
     ],
-    onComplete: S => { S.res.food += 30; S.res.water += 12; },
+    onComplete: S => { S.res.food += 30; S.res.water += 15; },
     fact: {
       title: 'Why Jezero was a candidate for people',
       body: 'At NASA’s 2015 human landing-site workshop, Jezero was proposed as an Exploration Zone (centred 17.75°N, 77.04°E) for its delta sediments, carbonate-altered olivine, water-bearing clays and a 500 m stack of hydrated Mg-sulfate rock. Mars surface gravity is 3.72 m/s², 0.38 g.',
@@ -121,7 +121,7 @@ export const MISSIONS = [
     ],
     stations: [
       { id: 'deploySolar', at: 'solar', r: 6, when: S => !S.built.solar && !S.job,
-        label: () => 'Unfold the solar array', use: S => S.startJob('Unfolding 40 m² of panels', 8, 'solar', () => S.build('solar')) },
+        label: () => 'Unfold the solar array', use: S => S.startJob('Unfolding 60 m² of panels', 8, 'solar', () => S.build('solar')) },
     ],
     objectives: [
       { text: 'Deploy the solar array  [E at the pad]', at: 'solar', done: S => S.built.solar },
@@ -131,7 +131,7 @@ export const MISSIONS = [
     ],
     fact: {
       title: 'Sunlight at Mars',
-      body: 'Sunlight at Mars averages 586 W/m² at the top of the atmosphere, 43% of Earth’s 1,361. Dust storms can last weeks or months; the 2018 global storm ended the solar-powered Opportunity rover.',
+      body: 'Sunlight at Mars averages 586 W/m² at the top of the atmosphere, 43% of Earth’s 1,361. Dust storms can last weeks or months; the 2018 global storm ended the solar-powered Opportunity rover. (The game’s array: 60 m² at 29% efficiency, output following the real Mars24 sun elevation.)',
       src: [['NASA Mars Fact Sheet', 'https://nssdc.gsfc.nasa.gov/planetary/factsheet/marsfact.html'],
             ['Spaceflight Now, 2018', 'https://spaceflightnow.com/2018/06/13/huge-dust-storm-knocks-aging-mars-rover-out-of-contact-with-earth/']],
     },
@@ -154,8 +154,8 @@ export const MISSIONS = [
     objectives: [
       { text: 'Carry the O₂ electrolysis stack to the plant pad', at: S => S.crateTarget('isru', 'plant'), done: S => S.delivered('isru') },
       { text: 'Assemble the plant  [E]', at: 'plant', done: S => S.built.o2plant },
-      { text: 'Make oxygen: fill the habitat tank to 7 kg', at: 'door',
-        progress: S => [S.res.habO2, 7, 'kg'], done: S => S.res.habO2 >= 7, wait: true,
+      { text: 'Make 1 kg of oxygen from the atmosphere', at: 'door',
+        progress: S => [S.c.o2Made, 1, 'kg'], done: S => S.c.o2Made >= 1, wait: true,
         say: [['K-7', 'It needs about 3 kW. It only runs when the battery can spare it — resting through the day helps.']] },
     ],
     fact: {
@@ -254,7 +254,7 @@ export const MISSIONS = [
     ],
     fact: {
       title: 'Farming on Mars',
-      body: 'Veggie and the Advanced Plant Habitat have grown lettuce, kale and Hatch chile peppers on the ISS. Nine of ten crops grew in a NASA Mars soil simulant — but that simulant has no perchlorate and the plants had Earth air. NASA’s 2024 Deep Space Food Challenge aimed to supplement stored food, not replace it. (In the game the greenhouse covers 35% of your diet.)',
+      body: 'Veggie and the Advanced Plant Habitat have grown lettuce, kale and Hatch chile peppers on the ISS. Nine of ten crops grew in a NASA Mars soil simulant — but that simulant has no perchlorate and the plants had Earth air. NASA’s 2024 Deep Space Food Challenge aimed to supplement stored food, not replace it. (In the game the greenhouse covers 40% of your diet.)',
       src: [['NASA NTRS 20140010665', 'https://ntrs.nasa.gov/api/citations/20140010665/downloads/20140010665.pdf'],
             ['CNN via ABC17 (chile peppers)', 'https://abc17news.com/news/national-world/cnn-national/2021/07/18/astronauts-on-international-space-station-are-growing-chile-peppers-in-a-first-for-nasa/'],
             ['Sci.News on Wamelink et al.', 'https://www.sci.news/space/crops-simulated-martian-lunar-dirt-07697.html'],
@@ -390,7 +390,7 @@ export const MISSIONS = [
     ],
     stations: [
       { id: 'cleanPV', at: 'solar', r: 7, when: S => S.flag.dusty,
-        label: () => 'Brush the dust off the panels', use: S => S.startJob('Brushing 40 m² of panels', 6, 'solar', () => { S.flag.dusty = false; }) },
+        label: () => 'Brush the dust off the panels', use: S => S.startJob('Brushing 60 m² of panels', 6, 'solar', () => { S.flag.dusty = false; }) },
       { id: 'unjam', at: 'oven', r: 5, when: S => S.flag.jam,
         label: () => 'Clear the oven auger', use: S => S.startJob('Clearing a jammed auger', 6, 'oven', () => { S.flag.jam = false; }) },
     ],
