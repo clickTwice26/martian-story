@@ -120,6 +120,11 @@ export const SCHEMA = {
       hint: "Plays the Kestrel's last approach and crash before you take control. Takes effect on the next load. Hold SPACE or press ESC to skip it.",
       apply: () => {},
     },
+    storyMode: {
+      label: 'Story Missions', type: 'toggle', def: true,
+      hint: 'Part Two: survive Jezero after the crash. Fourteen missions built on NASA data, with life support, a base to build and a way home. Takes effect on the next load. Progress is saved in this browser.',
+      apply: () => {},
+    },
     timeMode: {
       label: 'Time Source', type: 'select', options: ['Live Mars Time', 'Mission Sol', 'Frozen'], def: 'Mission Sol',
       hint: 'Live tracks the actual current time at Jezero. Mission Sol lets you pick any sol since landing.',

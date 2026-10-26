@@ -14,6 +14,7 @@ import { buildSettingsUI, keyName } from './settingsui.js';
 import { CharacterActions, LIFT_MAX } from './actions.js';
 import { Interactables, PropSet, RockSource } from './interact.js';
 import { Intro, WreckSite, crashLayout, INTRO_LMST } from './intro/intro.js';
+import { Survival } from './survival/survival.js';
 import { siteTime, missionSol, season, formatSolClock, sunDirection,
          utcForSolAndLmst, JEZERO, SOL_SECONDS } from './marstime.js';
 
@@ -132,6 +133,7 @@ const audio = new SuitAudio();
 let hf, terrain, lightCache, player, projector, waypoints, mask, astronaut, blobShadow, companion, rocks;
 let props, interactables, actions, grabMarker;
 let wreck = null, intro = null, crash = null;
+let survival = null, survivalModal = false;
 const SPAWN = { x: 0, z: 0, yaw: 2.3 };
 /* Shared with the overlay materials so the rover track bends with the ground
    instead of floating off it at range. */
@@ -260,6 +262,19 @@ async function boot() {
   player.events.footstep = (i, slope) => audio.footstep(i, slope);
   player.events.land = imp => audio.land(imp);
   setupActions();
+  if (settings.get('storyMode')) {
+    survival = new Survival({
+      scene, hf, crash, wreck, player, companion, actions, props, audio, timeState, camera,
+      isMeasured, notice: (m, ms) => showNotice(m, ms),
+    });
+    survival.onJournal = open => {
+      survivalModal = open;
+      input.enabled = !open;
+      input.clearKeys();
+      if (open) { if (document.pointerLockElement) document.exitPointerLock(); }
+      else input.requestCapture();
+    };
+  }
 
   el('elevRange').textContent = `${meta.elevMin.toFixed(1)} … ${meta.elevMax.toFixed(1)} m`;
   el('dataNote').textContent =
@@ -358,7 +373,7 @@ async function boot() {
   if (lowPowerGPU) showNotice('Low-power GPU detected — using the Low quality preset. ESC → Settings to change it.', 7000);
   window.__mars = { THREE, scene, camera, renderer, hf, terrain, player, projector, intro, wreck, crash,
                     waypoints, astronaut, audio, mask, SETTINGS, settings, timeState, input, companion, rocks, lightCache, res,
-                    sky, sunLight, SUN_DIR, actions, props, interactables,
+                    sky, sunLight, SUN_DIR, actions, props, interactables, survival,
                     setMarsTime: (sol, lmst) => { timeState.sol = sol; timeState.lmst = lmst; },
                     get viewMode() { return viewMode; },
                     get settingsOpen() { return settingsOpen; },
@@ -381,6 +396,7 @@ function setupActions() {
     onPunch: () => { audio.swing(1); player.exertion = Math.min(1, player.exertion + 0.04); },
     onThrow: (p, v) => { audio.swing(1.3); player.exertion = Math.min(1, player.exertion + 0.08); },
     onPickUp: p => {
+      survival?.onPickUp(p);
       audio.thud(0.4);
       if (p.mass > LIFT_MAX * 0.5) audio.exhaleSharp();
       player.exertion = Math.min(1, player.exertion + p.mass / LIFT_MAX * 0.25);
@@ -430,7 +446,9 @@ function updateActionHUD() {
   } else if (c) {
     const heavy = c.mass > LIFT_MAX;
     text = `<b>${key('grab')}</b> ${heavy ? 'try to lift' : 'pick up'} &nbsp; · ${c.label} ~${kg(c.mass)} kg` +
-           (heavy ? ' <i>(heavy)</i>' : '');
+           (heavy ? ' <i>(heavy)</i>' : '') + (survival ? survival.describe(c) : '');
+  } else if (survival && survival.prompt && player.mode === 'walk') {
+    text = `<b>${key('grab')}</b> ${survival.prompt}`;
   }
   if (pr.innerHTML !== text) pr.innerHTML = text;
   pr.classList.toggle('show', !!text);
@@ -553,6 +571,7 @@ function beginPlay() {
   hasCaptured = true;
   // the score needs the audio context, which only exists after this gesture
   if (intro && !intro.done && !intro.active) audioReady.finally(() => intro.start());
+  else if (survival && !survival.running && (!intro || intro.done)) survival.begin();
 }
 
 /** Draw the live world from an arbitrary camera (the opening's act III). */
@@ -590,7 +609,8 @@ function introDone(skipped) {
   camBoom = SETTINGS.view.camDistance;
   companion._greeted = true;               // it has already spoken, in the film
   companion._setMode('roam');
-  if (skipped) companion.say?.('Kestrel is gone, Commander. Perseverance\u2019s tracks are close \u2014 follow me.', 6000);
+  if (survival) survival.begin();
+  else if (skipped) companion.say?.('Kestrel is gone, Commander. Perseverance\u2019s tracks are close \u2014 follow me.', 6000);
   if (input.mode !== 'locked') {
     el('startBtn').textContent = 'CLICK TO EXPLORE';
     el('startHint').textContent = 'Mouse look needs pointer lock. If your browser refuses it, hold the left mouse button and drag to look instead \u2014 both work.';
@@ -601,6 +621,7 @@ function introDone(skipped) {
 addEventListener('keydown', e => {
   if (e.code !== 'Escape') return;
   if (intro && intro.active) { e.preventDefault(); intro.skip(); return; }
+  if (survivalModal) return;                 // the journal closes itself
   if (settingsOpen) { e.preventDefault(); closeSettings(); }
   else if (input.mode !== 'locked') { e.preventDefault(); openSettings(); }
   // While locked, the browser consumes Escape to exit the lock; the menu then
@@ -619,7 +640,7 @@ document.addEventListener('pointerlockchange', () => {
     hasCaptured = true;
     if (settingsOpen) { settingsOpen = false; input.enabled = true; el('settings').classList.remove('open'); }
     el('startOverlay').classList.add('hidden');
-  } else if (hasCaptured && !settingsOpen && !input.lockFailed) {
+  } else if (hasCaptured && !settingsOpen && !input.lockFailed && !survivalModal) {
     openSettings();
   }
   paintInputBadge();
@@ -668,10 +689,14 @@ function pollActions() {
   }
   // Character actions only exist on foot.
   const punch = input.consume('punch'), grab = input.consume('grab');
-  if (player.mode === 'walk') {
+  if (player.mode === 'walk' && !(survival && (survival.paused || survival.ending))) {
     if (punch) actions.punch();
-    if (grab) actions.grab();
+    if (grab && !(survival && survival.interact())) {
+      survival?.noteGrab(actions.candidate);
+      actions.grab();
+    }
   }
+  if (input.consume('journal') && survival && survival.running) survival.toggleJournal();
   if (input.consume('cycleRT')) {
     const tiers = ['Off', 'Low', 'Medium', 'High', 'Ultra'];
     const next = tiers[(tiers.indexOf(settings.get('rayTracing')) + 1) % tiers.length];
@@ -686,8 +711,10 @@ const TIME_RATES = { 'Paused': 0, '1x': 1, '60x': 60, '600x': 600, '3600x': 3600
 const LMST_PER_REAL_SECOND = 24 / SOL_SECONDS;   // a sol is 88,775.244 s, not 86,400
 
 function updateMarsTimeAndSun(dt) {
-  const mode = settings.get('timeMode');
-  const rate = TIME_RATES[settings.get('timeScale')] || 0;
+  // While the story runs it owns the clock: one Mars minute per real second.
+  const storyRate = survival ? survival.clockRate() : null;
+  const mode = storyRate !== null ? 'Mission Sol' : settings.get('timeMode');
+  const rate = storyRate !== null ? storyRate : TIME_RATES[settings.get('timeScale')] || 0;
 
   if (mode === 'Live Mars Time') {
     timeState.st = siteTime(new Date(), JEZERO.lonEast, JEZERO.latNorth);
@@ -725,7 +752,17 @@ function updateMarsTimeAndSun(dt) {
   terrain.material.uniforms.uSkyColor.value.setHex(0xc79a6d).multiplyScalar(0.18 + 0.82 * day);
   terrain.material.uniforms.uFogColor.value.setHex(0xb98c63).multiplyScalar(0.16 + 0.84 * day);
   sky.material.uniforms.uOpacity.value = 0.10 + 0.90 * day;
+
+  // A dust storm: the sun dims, the haze closes in and turns ochre.
+  const storm = survival ? survival.storm : 0;
+  terrain.material.uniforms.uFogDensity.value = settings.get('fogDensity') * (1 + 16 * storm);
+  if (storm > 0.002) {
+    sunLight.intensity *= 1 - 0.78 * storm;
+    terrain.material.uniforms.uSunColor.value.multiplyScalar(1 - 0.7 * storm);
+    terrain.material.uniforms.uFogColor.value.lerp(_stormFog, storm * 0.6);
+  }
 }
+const _stormFog = new THREE.Color(0x8a5a34);
 
 const _fwd = new THREE.Vector3(), _right = new THREE.Vector3();
 const _body = { pos: null, vel: null, yaw: 0, aimYaw: 0 };   // what CharacterActions acts from
@@ -791,6 +828,7 @@ function frame() {
   if (look.x || look.y) player.applyMouse(look.x, look.y);
   // What the hands are doing limits the legs: no sprinting with a boulder.
   const st = input.state();
+  if (survival && (survival.paused || survival.ending)) { st.axisX = st.axisY = 0; st.forward = st.back = st.left = st.right = st.jump = st.sprint = false; }
   actions.setDefend(player.mode === 'walk' && input.isDown('defend'));
   if (player.mode === 'walk') {
     st.axisX *= actions.moveScale; st.axisY *= actions.moveScale;
@@ -799,6 +837,7 @@ function frame() {
   }
   player.update(dt, st);
   if (wreck && wreck.pushOut(player.pos)) { player.vel.multiplyScalar(0.5); }
+  if (survival && survival.collide(player.pos)) { player.vel.multiplyScalar(0.5); }
   audio.update(dt, player.exertion);
 
   // Body turns toward travel when moving, toward the view when idle, and
@@ -838,7 +877,9 @@ function frame() {
     companion.update(dt, { player, projector, waypoints, isMeasured, timeState, settings });
   }
 
-  updateCamera(dt);
+  if (survival) survival.update(dt, { sunElevation: Math.asin(Math.max(-1, Math.min(1, SUN_DIR.y))) * 180 / Math.PI, camera });
+  if (!(survival && survival.driveCamera(camera))) updateCamera(dt);
+  if (survival && survival.hidePlayer) { astronaut.setVisible(false); blobShadow.visible = false; }
   uCamPosC.value.copy(camera.position);
   if (rocks && rocks.mesh.visible) rocks.update(camera.position.x, camera.position.z);
   if (wreck) wreck.update(dt);

@@ -40,13 +40,14 @@ export const ACTION_DEFS = {
   companion: { label: 'Signal Support Unit', def: ['KeyH', ''] },
   punch:     { label: 'Punch / Throw Held', def: ['KeyQ', 'Mouse0'] },
   defend:    { label: 'Defend (hold)', def: ['KeyX', 'Mouse2'] },
-  grab:      { label: 'Grab / Drop',   def: ['KeyE', ''] },
+  grab:      { label: 'Use / Grab / Drop', def: ['KeyE', ''] },
+  journal:   { label: 'Mission Journal', def: ['KeyJ', ''] },
   openMenu:  { label: 'Open Settings',  def: ['Escape', ''] },
 };
 
 const EDGE_ACTIONS = ['toggleView', 'surveyMode', 'respawn', 'roverTrack',
                       'gapOverlay', 'headBob', 'mute', 'timeBack', 'timeFwd',
-                      'sensDown', 'sensUp', 'cycleRT', 'companion', 'punch', 'grab'];
+                      'sensDown', 'sensUp', 'cycleRT', 'companion', 'punch', 'grab', 'journal'];
 
 /* Standard-mapping gamepad buttons for the character actions:
    X / Square punches, Y / Triangle grabs, LB blocks while held. */

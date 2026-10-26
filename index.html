@@ -248,6 +248,142 @@
     .set-seg button{padding:6px 8px}
   }
 
+  /* ------------------------------------------------------ survival story */
+  #sv{display:none}
+  #sv.on{display:block}
+  body.story #perfPanel,body.story #solPanel{display:none}
+  body.svCine #hud{display:none}
+  #svMission{top:236px;left:18px;width:min(330px,40vw)}
+  #svMission h3,#svLife h3{display:flex;justify-content:space-between;gap:12px}
+  #svScore{color:#ffd27a;letter-spacing:.12em}
+  #svTitle{font-size:17px;color:#ffd27a;letter-spacing:.14em;margin-bottom:3px}
+  #svTag{font-size:10px;color:#b5947c;line-height:1.5;margin-bottom:8px;white-space:normal}
+  #svObjs{list-style:none}
+  #svObjs li{display:flex;gap:7px;font-size:10.5px;line-height:1.45;padding:3px 0;color:#7d6353}
+  #svObjs li span{width:10px;flex:0 0 auto}
+  #svObjs li em{font-style:normal;flex:1}
+  #svObjs li b{font-weight:400;color:#7fe3ff;white-space:nowrap}
+  #svObjs li.now{color:#f2ddc6}
+  #svObjs li.now span{color:#ffb347}
+  #svObjs li.done{color:#6f8f6a;text-decoration:line-through}
+  #svObjs li.done span{color:#8fd88f;text-decoration:none}
+  #svHint{margin-top:8px;font-size:9px;color:#7d6353;letter-spacing:.1em}
+  #svHint b{color:#d9a97e}
+  #svLife{top:18px;right:18px;width:min(290px,34vw)}
+  #svSol{color:#f2ddc6}
+  .svRow{display:grid;grid-template-columns:78px 1fr;column-gap:8px;align-items:center;line-height:1.35;padding:2px 0}
+  .svRow span{color:#9a7c66;font-size:9.5px;letter-spacing:.08em}
+  .svRow b{font-weight:400;color:#f2ddc6;text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap;font-size:10.5px}
+  .svRow i{grid-column:1/3;height:3px;background:rgba(255,255,255,.08);margin-top:2px}
+  .svRow u{display:block;height:100%;background:#8fd88f;transition:width .3s}
+  .svRow.warn b{color:#ffc86a} .svRow.warn u{background:#ffb347}
+  .svRow.crit b{color:#ff7a5c;animation:svBlink .7s steps(2) infinite} .svRow.crit u{background:#ff5a3c}
+  .svRow.off{opacity:.38}
+  @keyframes svBlink{50%{opacity:.35}}
+  #svMarker{position:absolute;transform:translate(-50%,-50%);display:none;flex-direction:column;align-items:center;gap:4px;
+    color:#ffcf80;font-size:10px;letter-spacing:.12em;text-shadow:0 1px 3px #000}
+  #svMarker.show{display:flex}
+  #svMarker .dia{width:13px;height:13px;border:2px solid #ffb347;transform:rotate(45deg);box-shadow:0 0 10px rgba(255,179,71,.6)}
+  #svMarker.edge .dia{border-left-color:transparent;border-bottom-color:transparent;width:15px;height:15px}
+  #svBanner{position:absolute;left:50%;top:22%;transform:translateX(-50%);text-align:center;opacity:0;pointer-events:none;
+    font-family:"Avenir Next","Segoe UI","Helvetica Neue",Arial,sans-serif;width:min(820px,92vw)}
+  #svBanner.show{animation:svBan 5.2s ease forwards}
+  @keyframes svBan{0%{opacity:0;letter-spacing:.2em}10%{opacity:1;letter-spacing:.02em}82%{opacity:1}100%{opacity:0}}
+  #svBanner small{display:block;font-family:"SF Mono",ui-monospace,monospace;font-size:11px;letter-spacing:.34em;color:#ffb347}
+  #svBanner h2{font-weight:200;font-size:clamp(30px,5.4vw,64px);letter-spacing:.24em;color:#fff4e6;margin:8px 0;
+    text-shadow:0 0 24px rgba(255,150,80,.4),0 2px 8px #000}
+  #svBanner p{font-size:13px;color:#e8c9a8;letter-spacing:.06em;text-shadow:0 1px 4px #000}
+  #svComms{position:absolute;left:50%;bottom:64px;transform:translateX(-50%);width:min(680px,90vw);
+    background:rgba(10,18,26,.88);border:1px solid rgba(120,190,255,.4);border-left:3px solid #7fe3ff;
+    padding:10px 14px;font-size:12px;line-height:1.6;color:#d8ecff;opacity:0;transition:opacity .25s}
+  #svComms.show{opacity:1}
+  #svComms b{color:#7fe3ff;letter-spacing:.2em;font-size:10px;margin-right:10px}
+  #svComms.earth{border-left-color:#ffd27a;border-color:rgba(255,210,122,.4);background:rgba(26,18,8,.88)}
+  #svComms.earth b{color:#ffd27a}
+  #svFact{position:absolute;right:18px;top:330px;width:min(330px,40vw);background:rgba(12,20,16,.9);
+    border:1px solid rgba(143,216,143,.4);border-top:3px solid #8fd88f;padding:12px 14px;opacity:0;transform:translateX(30px);
+    transition:opacity .4s,transform .4s}
+  #svFact.show{opacity:1;transform:none}
+  #svFact small{font-size:9px;letter-spacing:.28em;color:#8fd88f}
+  #svFact h4{font-size:13px;color:#eaffea;margin:6px 0;font-weight:600}
+  #svFact p{font-size:10.5px;line-height:1.6;color:#c9dcc9}
+  #svFact em{display:block;margin-top:7px;font-style:normal;font-size:9px;color:#7f9a7f;line-height:1.5}
+  #svToast{position:absolute;left:50%;top:150px;transform:translateX(-50%);background:rgba(40,26,6,.92);
+    border:1px solid #ffd27a;padding:8px 18px;text-align:center;opacity:0}
+  #svToast.show{animation:svBan 4.2s ease forwards}
+  #svToast small{font-size:10px;letter-spacing:.24em;color:#ffd27a}
+  #svToast p{font-size:11px;color:#f2ddc6;margin-top:3px}
+  #svFloat{position:absolute;left:50%;top:calc(50% - 70px);transform:translateX(-50%);display:flex;flex-direction:column;align-items:center}
+  .svPts{color:#ffd27a;font-size:12px;letter-spacing:.08em;text-shadow:0 1px 4px #000;animation:svUp 2.2s ease forwards;white-space:nowrap}
+  .svPts.bad{color:#ff7a5c}
+  @keyframes svUp{0%{opacity:0;transform:translateY(10px)}15%{opacity:1}100%{opacity:0;transform:translateY(-38px)}}
+  #svJob{position:absolute;left:50%;top:calc(50% + 78px);transform:translateX(-50%);display:none;flex-direction:column;
+    align-items:center;gap:5px;font-size:10.5px;color:#f2ddc6;letter-spacing:.06em;text-shadow:0 1px 3px #000}
+  #svJob.show{display:flex}
+  #svJob i{width:220px;height:4px;background:rgba(255,255,255,.12)}
+  #svJob u{display:block;height:100%;width:0;background:#ffb347}
+  #svFade{position:fixed;inset:0;z-index:36;background:#000;opacity:0;pointer-events:none;transition:opacity .45s;
+    display:flex;align-items:center;justify-content:center;color:#b5947c;font-size:12px;letter-spacing:.4em}
+  #svFade.on{opacity:1}
+  #svJournal{position:fixed;inset:0;z-index:45;display:none;align-items:center;justify-content:center;
+    background:rgba(8,5,3,.8);backdrop-filter:blur(5px)}
+  #svJournal.open{display:flex}
+  #svJournal .jp{width:min(1080px,95vw);height:min(720px,92vh);display:flex;flex-direction:column;
+    background:linear-gradient(180deg,#1d1310,#140c09);border:1px solid rgba(200,140,95,.34);box-shadow:0 30px 90px rgba(0,0,0,.7)}
+  #svJournal .jh{display:flex;align-items:center;gap:16px;padding:14px 18px;border-bottom:1px solid rgba(200,140,95,.22)}
+  #svJournal .jh h2{font-size:14px;letter-spacing:.3em;color:#e9b98a;font-weight:600}
+  #svJournal .jh span{color:#9a7c66;font-size:10px;letter-spacing:.14em}
+  #svJournal .jh button{margin-left:auto;background:rgba(0,0,0,.35);color:#d6c2ab;border:1px solid rgba(200,140,95,.3);
+    padding:6px 11px;font-family:inherit;font-size:10px;letter-spacing:.12em;cursor:pointer}
+  #svJournal .jnote{padding:8px 18px;background:rgba(200,80,40,.2);color:#ffc8a8;font-size:11px}
+  #svJournal .jbody{flex:1;display:flex;min-height:0}
+  #svJournal .jcol{flex:1;overflow-y:auto;padding:12px 20px 20px}
+  #svJournal .jcol.facts{flex:1.3;border-left:1px solid rgba(200,140,95,.16)}
+  #svJournal h3{font-size:10px;letter-spacing:.24em;color:#c08a5e;margin:14px 0 8px}
+  #svJournal .tag{color:#b5947c;font-size:11px;line-height:1.6}
+  #svJournal ul{list-style:none;margin-top:6px}
+  #svJournal li{font-size:11px;line-height:1.6;color:#8e7462;padding-left:14px;position:relative}
+  #svJournal li:before{content:"·";position:absolute;left:2px}
+  #svJournal li.done{color:#6f8f6a;text-decoration:line-through} #svJournal li.done:before{content:"✓"}
+  #svJournal li.now{color:#f2ddc6} #svJournal li.now:before{content:"▸";color:#ffb347}
+  #svJournal table{width:100%;font-size:11px;border-collapse:collapse}
+  #svJournal td{padding:4px 0;border-bottom:1px solid rgba(200,140,95,.1);color:#b5947c}
+  #svJournal td:last-child{text-align:right;color:#f2ddc6}
+  #svJournal .jbs{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+  #svJournal .jb{border:1px solid rgba(200,140,95,.18);padding:6px 8px;opacity:.4}
+  #svJournal .jb.got{opacity:1;border-color:#ffd27a;background:rgba(255,210,122,.06)}
+  #svJournal .jb b{display:block;font-size:10px;color:#ffd27a;letter-spacing:.1em}
+  #svJournal .jb span{font-size:9.5px;color:#b5947c;line-height:1.45}
+  #svJournal .jkeys{margin-top:14px;font-size:9.5px;color:#7d6353;letter-spacing:.08em}
+  #svJournal .jf{border-left:2px solid #8fd88f;padding:4px 0 4px 12px;margin-bottom:14px}
+  #svJournal .jf small{font-size:9px;letter-spacing:.2em;color:#8fd88f}
+  #svJournal .jf h4{font-size:12.5px;color:#eaffea;margin:4px 0}
+  #svJournal .jf p{font-size:11px;line-height:1.65;color:#c9b8a6}
+  #svJournal .jf .src{font-size:10px;margin-top:4px}
+  #svJournal a{color:#7fe3ff}
+  #svEnd{position:fixed;inset:0;z-index:46;display:none;align-items:center;justify-content:center;cursor:pointer;
+    background:radial-gradient(ellipse at 50% 40%,rgba(40,20,10,.75),rgba(0,0,0,.92));animation:svIn 2s ease}
+  #svEnd.open{display:flex}
+  @keyframes svIn{from{opacity:0}to{opacity:1}}
+  #svEnd .ec{text-align:center;max-width:min(860px,92vw);font-family:"Avenir Next","Segoe UI","Helvetica Neue",Arial,sans-serif}
+  #svEnd small{font-family:"SF Mono",ui-monospace,monospace;letter-spacing:.4em;color:#ffb347;font-size:11px}
+  #svEnd h1{font-weight:200;font-size:clamp(40px,8vw,96px);letter-spacing:.4em;margin:10px -0.4em 14px 0;color:#fff4e6}
+  #svEnd .lead{font-size:15px;line-height:1.7;color:#e8d4bf}
+  #svEnd .es{display:flex;justify-content:center;flex-wrap:wrap;gap:26px;margin:26px 0}
+  #svEnd .es b{display:block;font-size:26px;font-weight:300;color:#ffd27a}
+  #svEnd .es span{font-size:10px;letter-spacing:.16em;color:#b5947c;text-transform:uppercase}
+  #svEnd .badges{color:#ffd27a;font-size:12px;letter-spacing:.1em}
+  #svEnd .hint{margin-top:22px;font-size:11px;letter-spacing:.3em;color:#9a7c66}
+  @media (max-width:1250px){
+    #svMission{top:200px}
+    #svFact{top:300px}
+  }
+  @media (max-width:880px){
+    #svMission{top:auto;bottom:118px;width:min(300px,58vw)}
+    #svFact{display:none}
+    #svJournal .jbody{flex-direction:column}
+    #svJournal .jcol.facts{border-left:0}
+  }
   #srcNote{position:absolute;bottom:9px;left:50%;transform:translateX(-50%);width:100%;pointer-events:none;
     color:#6f5949;font-size:9.5px;letter-spacing:.09em;text-align:center;line-height:1.7}
 </style>
@@ -301,7 +437,8 @@
     <b>M</b> gap-fill overlay &nbsp; <b>T</b> rover track &nbsp; <b>B</b> head bob<br/>
     <b>N</b> mute &nbsp; <b>[ ]</b> sensitivity &nbsp; <b>R</b> respawn<br/>
     <b>ESC</b> settings &nbsp; <b>G</b> ray tracing &nbsp; <b>H</b> call it over &nbsp; <b>SHIFT+H</b> heel/roam<br/><b>,</b> / <b>.</b> time of sol<br/>
-    <b>Q</b>/<b>CLICK</b> punch &nbsp; <b>X</b>/<b>R-CLICK</b> defend &nbsp; <b>E</b> grab / drop
+    <b>Q</b>/<b>CLICK</b> punch &nbsp; <b>X</b>/<b>R-CLICK</b> defend &nbsp; <b>E</b> use / grab / drop<br/>
+    <b>J</b> mission journal
   </div>
 
   <div id="crosshair"></div>
@@ -323,7 +460,7 @@
        hold the left mouse button and drag to look instead — both work.</p>
     <p class="keys"><b>WASD</b> move &middot; <b>SHIFT</b> run &middot; <b>SPACE</b> jump &middot;
        <b>V</b> view &middot; <b>ESC</b> settings<br/>
-       <b>Q</b> punch &middot; <b>X</b> defend &middot; <b>E</b> pick up / drop rocks</p>
+       <b>E</b> use / pick up / drop &middot; <b>J</b> mission journal &middot; <b>Q</b> punch</p>
   </div>
 </div>
 

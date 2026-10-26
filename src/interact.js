@@ -109,6 +109,12 @@ export class PropSet {
     this.group.add(prop.mesh);
     return prop;
   }
+  /** Take a body out of the world: it stops simulating and can no longer be picked up. */
+  remove(prop, keepMesh = false) {
+    const i = this.props.indexOf(prop);
+    if (i >= 0) this.props.splice(i, 1);
+    if (!keepMesh) this.group.remove(prop.mesh);
+  }
   update(dt) {
     for (const p of this.props) {
       p.update(dt, this.hf);
