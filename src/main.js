@@ -848,7 +848,9 @@ function frame() {
   input.pollPad();
   pollActions();
   const look = input.consumeLook();
-  if (look.x || look.y) player.applyMouse(look.x, look.y);
+  // the story's own camera moves (waking up, the launch) are not steerable
+  const lookLocked = survival && (survival.wake || survival.ending);
+  if ((look.x || look.y) && !lookLocked) player.applyMouse(look.x, look.y);
   // What the hands are doing limits the legs: no sprinting with a boulder.
   const st = input.state();
   if (survival && (survival.paused || survival.ending)) { st.axisX = st.axisY = 0; st.forward = st.back = st.left = st.right = st.jump = st.sprint = false; }

@@ -32,7 +32,7 @@
   .ld-title{position:absolute;left:0;right:0;top:27%;text-align:center;padding:0 16px}
   .ld-title small{display:block;font-size:10.5px;letter-spacing:.5em;color:#b08560;opacity:0;animation:ldIn 1.8s .3s ease forwards}
   .ld-title h1{font-family:"Avenir Next","Segoe UI","Helvetica Neue",Arial,sans-serif;font-weight:200;
-    font-size:clamp(34px,7.4vw,96px);letter-spacing:.42em;margin:18px -.42em 14px 0;color:#fff2e4;
+    font-size:clamp(30px,5.8vw,84px);letter-spacing:.42em;margin:18px -.42em 14px 0;color:#fff2e4;
     text-shadow:0 0 34px rgba(255,150,80,.38);opacity:0;animation:ldTitle 3.4s .5s cubic-bezier(.2,.7,.2,1) forwards,ldGlow 5s 4s ease-in-out infinite}
   @keyframes ldTitle{from{opacity:0;filter:blur(16px);letter-spacing:.9em}to{opacity:1;filter:blur(0);letter-spacing:.42em}}
   @keyframes ldGlow{50%{text-shadow:0 0 46px rgba(255,160,90,.55)}}
@@ -60,6 +60,7 @@
   /* on the title screen the start card sits where the loading bar was */
   #startOverlay.title{z-index:41;background:transparent;backdrop-filter:none;align-items:flex-start;padding-top:58vh}
   #startOverlay.title .start-card{opacity:0;animation:ldIn 1.4s .2s ease forwards}
+  #startOverlay.title .start-card p.keys{display:none}
   #startOverlay.title #startBtn{padding:16px 48px 16px 54px;background:rgba(10,6,4,.35);border-color:rgba(255,190,130,.55);
     color:#fff0e0;letter-spacing:.55em;font-size:13px;animation:btnGlow 2.8s ease-in-out infinite}
   #startOverlay.title #startBtn:hover{background:rgba(80,40,20,.45);border-color:#ffd0a0}

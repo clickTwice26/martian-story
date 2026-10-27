@@ -262,6 +262,7 @@ export class Survival {
    */
   _wakeUp(fromBlack) {
     this.paused = true;
+    this._levelView();
     const w = el('svWake');
     w.innerHTML = `<div class="blk"></div><div class="lid t"></div><div class="lid b"></div><div class="haze"></div>
       <div class="txt"><p></p><p></p><p></p></div>
@@ -342,6 +343,7 @@ export class Survival {
     removeEventListener('keydown', this._wakeKey, true);
     const silent = this.wake?.silent;
     this.wake = null;
+    this._levelView();
     w.classList.add('gone');
     setTimeout(() => { w.className = ''; w.innerHTML = ''; }, 900);
     for (const id of ['navPanel', 'marsPanel', 'svLife', 'srcNote', 'crosshair']) el(id)?.classList.add('svBooted');
@@ -354,6 +356,13 @@ export class Survival {
       const m = el('svMission'); m.classList.remove('svBooted'); void m.offsetWidth; m.classList.add('svBooted');
       document.body.classList.remove('svBoot');
     }, 900);
+  }
+
+  /** Look straight ahead, level, toward the wreck: where getting up should leave you. */
+  _levelView() {
+    const P = this.player, W = this.anchors.wreck;
+    P.yaw = P.aimYaw = Math.atan2(W.x - P.pos.x, W.z - P.pos.z);
+    P.pitch = P.aimPitch = -0.05;
   }
 
   /** Small synthesised cues for the wake-up, on the suit audio's context. */
@@ -1362,7 +1371,7 @@ export class Survival {
     const mk = el('svMarker');
     const mi = MISSIONS[this.m];
     const o = mi?.objectives[this.step];
-    if (!o || !o.at || this.ending || !cam) { mk.classList.remove('show'); this._beacon(null); return; }
+    if (!o || !o.at || this.ending || this.wake || !cam) { mk.classList.remove('show'); this._beacon(null); return; }
     const p = this.pt(typeof o.at === 'function' ? o.at(this) : o.at);
     if (!p) { mk.classList.remove('show'); this._beacon(null); return; }
     this._beacon(p);

@@ -100,8 +100,11 @@ that costs less than a gameplay frame; act III is the game's own renderer.
 
 ### Part Two: Survive Jezero
 
-After the crash the game becomes a survival campaign of **14 missions in five
-acts**, built on the numbers in the
+After the crash the night passes in black, and Part Two opens on a wake-up:
+typed lines, a SOL 1 stamp and a heartbeat, eyes opening through a red haze
+onto the dawn sky, the suit alarm, the HUD booting panel by panel, and the view
+rising from the ground (`SPACE` skips it). From there the game becomes a
+survival campaign of **14 missions in five acts**, built on the numbers in the
 [research report](reports/Mars%20survival%20resources%20from%20NASA%20data.md).
 Turn it off under Settings → World → Story Missions. Progress is saved in the
 browser; press `R` twice in the journal to start over.
