@@ -30,9 +30,9 @@ export const CRATES = {
 
 /* ------------------------------------------------------------- the story -- */
 export const OPENING = [
-  ['K-7', 'Good morning, Commander. Sol one after impact. You slept in the cockpit; I kept watch.'],
-  ['K-7', 'Bad news first: the cabin oxygen ran out at 06:12. Your suit is on its reserve.'],
-  ['K-7', 'Good news: the cargo bay is still sealed, and Earth knows we are alive. Let’s keep it that way.'],
+  ['K-7', 'You were out all night. I fed your suit from my own tanks until they ran dry at 06:12.'],
+  ['K-7', 'Your suit is down to its own reserve: under two hours. There is an emergency bottle in the cargo bay.'],
+  ['K-7', 'The bay is still sealed, and Earth knows we are alive. Let’s keep it that way.'],
 ];
 
 export const MISSIONS = [
@@ -42,7 +42,7 @@ export const MISSIONS = [
     tagline: 'Your suit has under two hours of oxygen.',
     points: 150,
     brief: [
-      ['K-7', 'There is an emergency O₂ bottle in the aft cargo bay. Follow the beacon. Walk, don’t run — running burns oxygen faster.'],
+      ['K-7', 'Follow the beacon to the aft cargo bay. Walk, don’t run — running burns oxygen faster.'],
     ],
     objectives: [
       { text: 'Reach the Kestrel’s cargo bay', at: 'bay', done: S => S.near('bay', 3.5) },

@@ -11,27 +11,59 @@
   #app{position:fixed;inset:0}
   #app canvas{display:block}
 
-  /* ------------------------------------------------------------- loading */
-  #loading{position:fixed;inset:0;z-index:40;display:flex;flex-direction:column;
-    align-items:center;justify-content:center;gap:22px;
-    background:radial-gradient(ellipse at 50% 45%,#3a2015,#120a07 70%);
-    transition:opacity .5s ease}
+  /* ------------------------------------------- loading: the title screen */
+  @property --p{syntax:'<number>';inherits:true;initial-value:0}
+  #loading{position:fixed;inset:0;z-index:40;overflow:hidden;background:#05030a;
+    transition:opacity .9s ease,background 1.1s ease;--p:0}
   #loading.hidden{opacity:0;pointer-events:none}
-  #loading h1{font-size:clamp(30px,6vw,58px);letter-spacing:.16em;font-weight:600;color:#e9b98a}
-  #loading h2{font-size:12px;letter-spacing:.34em;color:#9a7c66;font-weight:400}
-  #loadTrack{width:min(460px,72vw);height:3px;background:#3a2519;overflow:hidden}
-  #loadBar{height:100%;width:100%;background:#e0a06a;transform:scaleX(0);
-    transform-origin:left center;transition:transform .2s ease}
-  #loadStatus{font-size:12px;color:#b5947c;letter-spacing:.06em;min-height:1.2em}
-  #credit{position:absolute;bottom:26px;font-size:10.5px;color:#7d6353;
-    letter-spacing:.05em;text-align:center;line-height:1.8;max-width:min(620px,86vw)}
+  #ldStars,#ldStars2{position:absolute;inset:-12%;will-change:transform;
+    animation:ldDrift 170s linear infinite}
+  #ldStars2{animation:ldDrift 95s linear infinite,ldTwinkle 3.2s ease-in-out infinite alternate}
+  @keyframes ldDrift{from{transform:translate3d(0,0,0)}to{transform:translate3d(-9%,3%,0)}}
+  @keyframes ldTwinkle{from{opacity:.2}to{opacity:.85}}
+  /* Mars rises over the bottom edge as the data loads */
+  #ldMars{position:absolute;left:50%;top:100%;width:240vmax;height:240vmax;border-radius:50%;
+    transform:translate(-50%,calc(-1 * (6vh + var(--p) * 17vh)));transition:transform 1.6s cubic-bezier(.2,.7,.2,1);
+    background:radial-gradient(circle at 50% 3%,#e08446 0,#b2501f 3.5%,#7a2f12 9%,#3a1508 18%,#140705 32%);
+    box-shadow:0 0 70px 18px rgba(255,130,60,.30),0 0 240px 90px rgba(255,90,30,.13);
+    animation:ldMarsIn 3s ease both}
+  @keyframes ldMarsIn{from{opacity:0}to{opacity:1}}
+  #ldVig{position:absolute;inset:0;background:radial-gradient(ellipse at 50% 42%,transparent 40%,rgba(0,0,0,.65) 100%)}
+  .ld-title{position:absolute;left:0;right:0;top:27%;text-align:center;padding:0 16px}
+  .ld-title small{display:block;font-size:10.5px;letter-spacing:.5em;color:#b08560;opacity:0;animation:ldIn 1.8s .3s ease forwards}
+  .ld-title h1{font-family:"Avenir Next","Segoe UI","Helvetica Neue",Arial,sans-serif;font-weight:200;
+    font-size:clamp(34px,7.4vw,96px);letter-spacing:.42em;margin:18px -.42em 14px 0;color:#fff2e4;
+    text-shadow:0 0 34px rgba(255,150,80,.38);opacity:0;animation:ldTitle 3.4s .5s cubic-bezier(.2,.7,.2,1) forwards,ldGlow 5s 4s ease-in-out infinite}
+  @keyframes ldTitle{from{opacity:0;filter:blur(16px);letter-spacing:.9em}to{opacity:1;filter:blur(0);letter-spacing:.42em}}
+  @keyframes ldGlow{50%{text-shadow:0 0 46px rgba(255,160,90,.55)}}
+  .ld-title h2{font-size:11px;letter-spacing:.42em;color:#c99a76;font-weight:400;opacity:0;animation:ldIn 2s 1.7s ease forwards}
+  @keyframes ldIn{to{opacity:1}}
+  #ldBottom{position:absolute;left:0;right:0;top:61%;display:flex;flex-direction:column;align-items:center;gap:14px;
+    transition:opacity .7s ease;opacity:0;animation:ldIn 1.2s 1.2s ease forwards}
+  #loading.ready #ldBottom{animation:none;opacity:0}
+  #loadTrack{width:min(380px,66vw);height:2px;background:rgba(255,200,150,.12);overflow:hidden}
+  #loadBar{height:100%;width:100%;background:linear-gradient(90deg,#b8602a,#ffd6aa);transform:scaleX(0);
+    transform-origin:left center;transition:transform .35s ease;box-shadow:0 0 12px rgba(255,170,100,.8)}
+  #loadStatus{font-size:10px;color:#a88a74;letter-spacing:.22em;text-transform:uppercase;min-height:1.2em}
+  #credit{position:absolute;bottom:22px;left:50%;transform:translateX(-50%);width:min(640px,88vw);font-size:10px;color:#6f5949;
+    letter-spacing:.05em;text-align:center;line-height:1.9;opacity:0;animation:ldIn 2s 2.2s ease forwards}
   #credit a{color:#b08560}
+  /* BEGIN: everything sinks into black before the film starts */
+  #loading.go{background:#000}
+  #loading.go>*{opacity:0!important;transition:opacity 1.1s ease!important;animation:none!important}
 
   /* -------------------------------------------------------------- start */
   #startOverlay{position:fixed;inset:0;z-index:30;display:flex;align-items:center;
     justify-content:center;background:rgba(14,8,5,.52);backdrop-filter:blur(2px);
     transition:opacity .25s ease}
   #startOverlay.hidden{opacity:0;pointer-events:none}
+  /* on the title screen the start card sits where the loading bar was */
+  #startOverlay.title{z-index:41;background:transparent;backdrop-filter:none;align-items:flex-start;padding-top:58vh}
+  #startOverlay.title .start-card{opacity:0;animation:ldIn 1.4s .2s ease forwards}
+  #startOverlay.title #startBtn{padding:16px 48px 16px 54px;background:rgba(10,6,4,.35);border-color:rgba(255,190,130,.55);
+    color:#fff0e0;letter-spacing:.55em;font-size:13px;animation:btnGlow 2.8s ease-in-out infinite}
+  #startOverlay.title #startBtn:hover{background:rgba(80,40,20,.45);border-color:#ffd0a0}
+  @keyframes btnGlow{50%{box-shadow:0 0 28px rgba(255,150,80,.35),inset 0 0 16px rgba(255,150,80,.16)}}
   .start-card{display:flex;flex-direction:column;align-items:center;gap:16px;text-align:center;
     padding:0 24px}
   .start-card p{font-size:11px;line-height:1.75;color:#b5947c;letter-spacing:.04em;max-width:46ch}
@@ -57,12 +89,35 @@
   #cineVig{position:absolute;inset:0;opacity:0;background:radial-gradient(ellipse at center,rgba(0,0,0,0) 55%,rgba(0,0,0,.55) 100%)}
   #cineOpen{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;
     font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace;font-size:13px;letter-spacing:.32em;color:#d9c6b0}
-  #cineOpen div{min-height:1.4em;text-align:center;padding:0 24px}
+  #cineOpen div{min-height:1.4em;text-align:center;padding:0 24px;text-shadow:0 0 14px rgba(255,190,140,.35);
+    transition:opacity .8s ease,filter 1s ease,letter-spacing 1.4s ease}
+  #cineOpen div.typing::after{content:"\258D";margin-left:.12em;color:#ffcf9a;animation:caret .7s steps(2) infinite}
+  @keyframes caret{50%{opacity:0}}
+  #cineOpen div.dim{opacity:.42!important}
+  #cineOpen::before,#cineOpen::after{content:"";position:absolute;left:50%;height:1px;width:0;transform:translateX(-50%);
+    background:linear-gradient(90deg,transparent,rgba(255,205,160,.85),transparent);box-shadow:0 0 12px rgba(255,170,110,.6);
+    transition:width 1.8s cubic-bezier(.2,.8,.2,1),opacity 1.2s ease}
+  #cineOpen::before{top:calc(50% - 52px)} #cineOpen::after{top:calc(50% + 52px)}
+  #cineOpen.line::before,#cineOpen.line::after{width:min(760px,82vw)}
+  #cineOpen.out div{opacity:0!important;filter:blur(7px);letter-spacing:.7em}
+  #cineOpen.out::before,#cineOpen.out::after{opacity:0;width:min(1400px,98vw)}
+  /* the dark opens like an iris onto space */
+  @property --iris{syntax:'<percentage>';inherits:false;initial-value:0%}
+  #cineFade.iris{-webkit-mask-image:radial-gradient(circle at 50% 48%,transparent var(--iris),#000 calc(var(--iris) + 28%));
+    mask-image:radial-gradient(circle at 50% 48%,transparent var(--iris),#000 calc(var(--iris) + 28%));
+    animation:iris 3.6s cubic-bezier(.6,0,.3,1) forwards}
+  @keyframes iris{from{--iris:0%}to{--iris:115%}}
   #cineTitle{position:absolute;left:0;right:0;top:38%;text-align:center;opacity:0;transition:opacity 2.4s ease, letter-spacing 9s ease}
   #cineTitle h1{font-weight:200;font-size:clamp(34px,7vw,92px);letter-spacing:.42em;margin-right:-.42em;color:#fff4e6;
     text-shadow:0 0 30px rgba(255,170,110,.35)}
   #cineTitle h2{margin-top:18px;font-weight:300;font-size:clamp(10px,1.2vw,14px);letter-spacing:.6em;color:#d4a985}
   #cineTitle.show{opacity:1}
+  #cineTitle h1{filter:blur(12px);transition:filter 2.8s cubic-bezier(.2,.7,.2,1)}
+  #cineTitle.show h1{filter:blur(0)}
+  #cineTitle::after{content:"";position:absolute;top:-20%;bottom:-20%;left:-30%;width:24%;opacity:0;pointer-events:none;
+    background:linear-gradient(100deg,transparent,rgba(255,235,210,.20),transparent)}
+  #cineTitle.show::after{animation:sweep 3s .5s ease-out forwards}
+  @keyframes sweep{0%{left:-30%;opacity:0}15%{opacity:1}100%{left:110%;opacity:0}}
   #cineSub{position:absolute;left:50%;bottom:calc(11vh + 26px);transform:translateX(-50%);width:min(860px,88vw);text-align:center;
     font-size:clamp(14px,1.6vw,20px);line-height:1.5;opacity:0;transition:opacity .45s ease;text-shadow:0 2px 6px #000,0 0 2px #000}
   #cineSub.show{opacity:1}
@@ -384,6 +439,47 @@
     #svJournal .jbody{flex-direction:column}
     #svJournal .jcol.facts{border-left:0}
   }
+  /* ------------------------------------------ Part Two: the wake-up */
+  @property --blur{syntax:'<length>';inherits:false;initial-value:0px}
+  @property --tint{syntax:'<number>';inherits:false;initial-value:0}
+  #svWake{position:fixed;inset:0;z-index:37;pointer-events:none;display:none;overflow:hidden;
+    font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace}
+  #svWake.on{display:block}
+  #svWake.gone{opacity:0;transition:opacity .8s ease}
+  #svWake .blk{position:absolute;inset:0;background:#000;opacity:0;transition:opacity 2s ease}
+  #svWake.instant .blk{transition:none}
+  #svWake.dark .blk{opacity:1}
+  #svWake.open .blk{opacity:0;transition:opacity .7s ease}
+  #svWake .lid{position:absolute;left:-15%;width:130%;height:57%;background:#000;opacity:0;
+    transition-property:transform;transition-timing-function:cubic-bezier(.45,0,.2,1)}
+  #svWake .lid.t{top:0;border-radius:0 0 50% 50%/0 0 46% 46%;box-shadow:0 18px 40px 10px #000}
+  #svWake .lid.b{bottom:0;border-radius:50% 50% 0 0/46% 46% 0 0;box-shadow:0 -18px 40px 10px #000}
+  #svWake.eyes .lid{opacity:1}
+  #svWake .haze{position:absolute;inset:0;backdrop-filter:blur(var(--blur));-webkit-backdrop-filter:blur(var(--blur));
+    background:radial-gradient(ellipse at 50% 50%,rgba(90,20,6,calc(var(--tint) * .5)),rgba(40,4,0,var(--tint)));
+    transition:--blur 2.8s ease,--tint 2.8s ease}
+  #svWake .txt{position:absolute;left:0;right:0;top:41%;display:flex;flex-direction:column;align-items:center;gap:15px;
+    color:#d9c6b0;font-size:13px;letter-spacing:.28em;text-align:center;transition:opacity 1.2s ease,filter 1.2s ease}
+  #svWake .txt p{min-height:1.4em;padding:0 24px;transition:opacity .8s ease;text-shadow:0 0 14px rgba(255,190,140,.3)}
+  #svWake .txt p.dim{opacity:.4}
+  #svWake .txt p.typing::after{content:"\258D";margin-left:.12em;color:#ffcf9a;animation:caret .7s steps(2) infinite}
+  #svWake .txt.out{opacity:0;filter:blur(7px)}
+  #svWake .stamp{position:absolute;left:0;right:0;top:36%;text-align:center;opacity:0;transition:opacity 1.6s ease}
+  #svWake .stamp h1{font-family:"Avenir Next","Segoe UI","Helvetica Neue",Arial,sans-serif;font-weight:200;
+    font-size:clamp(48px,9vw,124px);letter-spacing:.7em;margin-right:-.7em;color:#fff2e4;
+    text-shadow:0 0 40px rgba(255,150,80,.4);transition:letter-spacing 5s cubic-bezier(.2,.7,.2,1)}
+  #svWake .stamp.show{opacity:1}
+  #svWake .stamp.show h1{letter-spacing:.34em}
+  #svWake .stamp h2{font-size:11px;letter-spacing:.42em;color:#c99a76;margin-top:16px;font-weight:400}
+  #svWake .skip{position:absolute;right:28px;bottom:22px;font-size:9.5px;letter-spacing:.28em;color:#6f5949}
+  #svWake.open .skip{color:#b5947c;text-shadow:0 1px 3px #000}
+  /* the HUD boots panel by panel as the suit wakes */
+  body.svBoot #navPanel:not(.svBooted),body.svBoot #marsPanel:not(.svBooted),body.svBoot #svLife:not(.svBooted),
+  body.svBoot #svMission:not(.svBooted),body.svBoot #srcNote:not(.svBooted),body.svBoot #crosshair:not(.svBooted),
+  body.svBoot #inputMode,body.svBoot #actionPrompt{opacity:0}
+  .svBooted{animation:svBootIn 1s ease-out}
+  @keyframes svBootIn{0%{opacity:0;clip-path:inset(0 0 100% 0)}18%{opacity:1}28%{opacity:.25}40%{opacity:1}
+    55%{opacity:.55}70%{opacity:1}100%{opacity:1;clip-path:inset(0 0 0 0)}}
   #srcNote{position:absolute;bottom:9px;left:50%;transform:translateX(-50%);width:100%;pointer-events:none;
     color:#6f5949;font-size:9.5px;letter-spacing:.09em;text-align:center;line-height:1.7}
 </style>
@@ -483,16 +579,43 @@
 <div id="settings"></div>
 
 <div id="loading">
-  <h1>JEZERO</h1>
-  <h2>18.44° N &nbsp; 77.45° E</h2>
-  <div id="loadTrack"><div id="loadBar"></div></div>
-  <div id="loadStatus">Initialising…</div>
-  <div id="credit" style="line-height:1.9">
+  <div id="ldStars"></div><div id="ldStars2"></div>
+  <div id="ldMars"></div>
+  <div id="ldVig"></div>
+  <div class="ld-title">
+    <small>A SURVIVAL STORY ON REAL NASA DATA</small>
+    <h1>MARTIAN STORY</h1>
+    <h2>JEZERO CRATER &nbsp;·&nbsp; 18.44° N &nbsp; 77.45° E</h2>
+  </div>
+  <div id="ldBottom">
+    <div id="loadTrack"><div id="loadBar"></div></div>
+    <div id="loadStatus">Initialising…</div>
+  </div>
+  <div id="credit">
     Real elevation from the USGS <em>Mars 2020 Terrain Relative Navigation HiRISE DTM Mosaic</em>,
     built from six HiRISE stereo pairs at 1 m/px.<br/>
     Rover track from NASA MMGIS Mars 2020 traverse data, through sol 1980 (45.1 km driven).
   </div>
 </div>
+<script>
+/* Stars for the title screen, drawn before the game module even loads. */
+(function () {
+  function layer(n, maxR, seed) {
+    var c = document.createElement('canvas'); c.width = c.height = 640;
+    var g = c.getContext('2d'), s = seed;
+    function r() { s = (s * 16807) % 2147483647; return s / 2147483647; }
+    for (var i = 0; i < n; i++) {
+      var x = r() * 640, y = r() * 640, rad = Math.pow(r(), 3) * maxR + 0.35, a = 0.35 + r() * 0.65;
+      var warm = r() < 0.3;
+      g.fillStyle = warm ? 'rgba(255,214,180,' + a + ')' : 'rgba(225,232,255,' + a + ')';
+      g.beginPath(); g.arc(x, y, rad, 0, 6.2832); g.fill();
+    }
+    return 'url(' + c.toDataURL() + ')';
+  }
+  document.getElementById('ldStars').style.backgroundImage = layer(520, 1.1, 7);
+  document.getElementById('ldStars2').style.backgroundImage = layer(70, 1.9, 13);
+})();
+</script>
 
 <script type="importmap">
 {

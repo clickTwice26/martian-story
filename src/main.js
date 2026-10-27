@@ -22,7 +22,11 @@ const R_MARS = 3396190.0;
 const DEG = Math.PI / 180;
 const el = id => document.getElementById(id);
 const status = s => { el('loadStatus').textContent = s; };
-const bar = f => { el('loadBar').style.transform = `scaleX(${Math.max(0, Math.min(1, f))})`; };
+const bar = f => {
+  f = Math.max(0, Math.min(1, f));
+  el('loadBar').style.transform = `scaleX(${f})`;
+  el('loading').style.setProperty('--p', f.toFixed(3));      // Mars rises as the data loads
+};
 
 function makeProjector(meta, anchorCol, anchorRow) {
   const { xLeft, yTop } = meta.projected;
@@ -364,11 +368,15 @@ async function boot() {
     if (!settingsOpen && input.mode !== 'locked') beginPlay();
   });
 
-  el('loading').classList.add('hidden');
-  if (intro) {
-    el('startBtn').textContent = 'BEGIN';
-    el('startHint').textContent = 'A short opening plays first. Hold SPACE or press ESC to skip it.';
-  }
+  // The loading screen stays as the title screen: its bar gives way to the start button.
+  el('loading').classList.add('ready');
+  el('startOverlay').classList.add('title');
+  const resume = survival && survival.hasSave;
+  el('startBtn').textContent = resume ? 'CONTINUE' : intro || survival ? 'BEGIN' : 'EXPLORE';
+  el('startHint').textContent = intro
+    ? 'A short film opens the story. Hold SPACE or press ESC to skip it.'
+    : resume ? 'Part Two resumes where you left off.'
+    : 'Mouse look needs pointer lock. If your browser refuses it, hold the left mouse button and drag to look instead.';
   el('startOverlay').classList.remove('hidden');   // never un-hidden before: the bug
   if (lowPowerGPU) showNotice('Low-power GPU detected — using the Low quality preset. ESC → Settings to change it.', 7000);
   window.__mars = { THREE, scene, camera, renderer, hf, terrain, player, projector, intro, wreck, crash,
@@ -558,6 +566,8 @@ function closeSettings() {
   settingsOpen = false;
   input.enabled = true;
   el('settings').classList.remove('open');
+  // Still on the title screen: go back to it rather than capturing the mouse.
+  if (!begun) { el('startOverlay').classList.remove('hidden'); return; }
   input.requestCapture();                  // still inside the click gesture
 }
 
@@ -566,11 +576,25 @@ function closeSettings() {
  * The previous version awaited audio.start() first, which spent the gesture
  * and made the browser refuse the lock - leaving the mouse dead with no error.
  */
+let begun = false;
 function beginPlay() {
   input.requestCapture();
   const audioReady = audio.start().catch(() => {});
   el('startOverlay').classList.add('hidden');
   hasCaptured = true;
+  if (!begun) {
+    // Leave the title screen: it sinks to black, and the film or the story
+    // starts out of that black, so there is never a cut.
+    begun = true;
+    el('startOverlay').classList.remove('title');
+    el('loading').classList.add('go');
+    Promise.all([audioReady, new Promise(r => setTimeout(r, 1250))]).then(() => {
+      if (intro && !intro.done && !intro.active) intro.start();
+      else if (survival && !survival.running) survival.begin(true);
+      setTimeout(() => el('loading').classList.add('hidden'), 60);
+    });
+    return;
+  }
   // the score needs the audio context, which only exists after this gesture
   if (intro && !intro.done && !intro.active) audioReady.finally(() => intro.start());
   else if (survival && !survival.running && (!intro || intro.done)) survival.begin();
@@ -877,7 +901,8 @@ function frame() {
   }
 
   if (survival) survival.update(dt, { sunElevation: Math.asin(Math.max(-1, Math.min(1, SUN_DIR.y))) * 180 / Math.PI, camera });
-  if (!(survival && survival.driveCamera(camera))) updateCamera(dt);
+  updateCamera(dt);
+  if (survival) survival.driveCamera(camera);        // the story's camera moves blend from the gameplay view
   if (survival && survival.hidePlayer) { astronaut.setVisible(false); blobShadow.visible = false; }
   uCamPosC.value.copy(camera.position);
   if (rocks && rocks.mesh.visible) rocks.update(camera.position.x, camera.position.z);

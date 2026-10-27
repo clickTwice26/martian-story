@@ -352,12 +352,21 @@ export class Intro {
       at(t + dur, () => this._sub(null));
     };
     const open = this.ui.cineOpen.children;
+    // A transmission draws itself out of the dark, then the dark opens like an iris.
     at(0.0, () => { this.score?.drone(true, { level: 0.06 }); this.score?.chord(CHORDS.Dm9, { attack: 5, hold: 6, level: 0.035, bright: 700 }); });
-    at(0.8, () => this._type(open[0], 'INTERPLANETARY COURIER  KESTREL'));
-    at(2.4, () => this._type(open[1], 'DAY 212 OF 214  ·  EARTH → MARS TRANSFER'));
-    at(4.0, () => this._type(open[2], 'CREW 1, IN HIBERNATION  ·  AT THE HELM: SUPPORT UNIT K-7'));
-    at(5.6, () => { this._tween(this.ui.cineOpen, 'opacity', 1, 0, 1.2); this._fadeTo(0, 2.6); this.score?.bells(true); });
-    at(7.4, () => this.ui.cineTitle.classList.add('show'));
+    at(0.3, () => this.ui.cineOpen.classList.add('line'));
+    at(0.9, () => this._type(open[0], 'INTERPLANETARY COURIER  KESTREL'));
+    at(2.5, () => this._type(open[1], 'DAY 212 OF 214  ·  EARTH → MARS TRANSFER'));
+    at(4.1, () => this._type(open[2], 'CREW 1, IN HIBERNATION  ·  AT THE HELM: SUPPORT UNIT K-7'));
+    at(5.0, () => this.score?.swell(2.4));
+    at(5.6, () => {
+      this.ui.cineOpen.classList.add('out');
+      this.ui.cineFade.classList.add('iris');
+      this._fadeTo(0, 3.6);
+      this.score?.bells(true);
+    });
+    at(7.3, () => { this.ui.cineTitle.classList.add('show'); this.score?.braam(); });
+    at(9.4, () => { this.ui.cineFade.classList.remove('iris'); this.ui.cineOpen.classList.remove('line', 'out'); this.ui.cineOpen.style.opacity = 0; });
     at(8.0, () => this.score?.chord(CHORDS.Bbmaj7, { attack: 4, hold: 6, level: 0.04 }));
     at(13.6, () => this.ui.cineTitle.classList.remove('show'));
     at(12.2, () => this._card('earth', true)); at(16.4, () => this._card('earth', false));
@@ -408,7 +417,14 @@ export class Intro {
   }
 
   /* ----------------------------------------------------------------- UI -- */
-  _type(el, text, cps = 34) { this.typers.push({ el, text, t0: this.t, cps, n: 0 }); el.textContent = ''; el.style.opacity = 1; }
+  _type(el, text, cps = 34) {
+    // earlier lines of the same block step back as a new one types
+    if (el.parentElement === this.ui.cineOpen)
+      for (const sib of el.parentElement.children) if (sib !== el && sib.textContent) sib.classList.add('dim');
+    this.typers.push({ el, text, t0: this.t, cps, n: 0 });
+    el.textContent = ''; el.style.opacity = 1;
+    el.classList.remove('dim'); el.classList.add('typing');
+  }
   _sub(who, text) {
     const s = this.ui.cineSub;
     if (!who) { s.classList.remove('show'); return; }
@@ -436,6 +452,7 @@ export class Intro {
         if (ty.text[n - 1] && ty.text[n - 1] !== ' ') this.score?.tick();
       }
     }
+    for (const ty of this.typers) if (ty.n >= ty.text.length) ty.el.classList.remove('typing');
     this.typers = this.typers.filter(ty => ty.n < ty.text.length);
     for (const tw of this.tweens) {
       const k = clamp01((this.t - tw.t0) / tw.dur);
@@ -464,7 +481,9 @@ export class Intro {
     ui.cineFade.style.opacity = 1; ui.cineFlash.style.opacity = 0;
     ui.cineGrain.style.opacity = 0; ui.cineVig.style.opacity = 0;
     ui.cineOpen.style.opacity = 1;
-    for (const d of ui.cineOpen.children) d.textContent = '';
+    ui.cineOpen.classList.remove('line', 'out');
+    ui.cineFade.classList.remove('iris');
+    for (const d of ui.cineOpen.children) { d.textContent = ''; d.classList.remove('dim', 'typing'); }
     ui.cineTitle.querySelector('h1').textContent = 'MARTIAN STORY';
     ui.cineTitle.querySelector('h2').innerHTML = 'PART ONE &nbsp;·&nbsp; THE LAST APPROACH';
     this.w.setHud(false);
@@ -493,6 +512,7 @@ export class Intro {
     if (!this.active || this._skipping) return;
     this._skipping = true;
     this._skipT = this.t;
+    this.ui.cineFade.classList.remove('iris');      // the iris mask would hide the fade
     this._fadeTo(1, 0.6);
     this.score?.stop(0.8);
   }

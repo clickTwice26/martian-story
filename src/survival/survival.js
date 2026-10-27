@@ -216,7 +216,8 @@ export class Survival {
 
   /* ================================================================= start == */
   /** Called when play begins (after the opening, or straight away without it). */
-  begin() {
+  /** @param fromBlack the screen is already black (the title faded out), so skip the fade-down. */
+  begin(fromBlack = false) {
     if (this.running) return;
     this.running = true;
     this.hud.root.classList.add('on');
@@ -248,13 +249,152 @@ export class Survival {
       this.timeState.sol += 1;
       this.timeState.lmst = 7 + 40 / 60;
       this.solsSinceCrash = 1;
-      this._fade(true);
-      setTimeout(() => {
-        this._fade(false);
-        this._banner('PART TWO', 'SURVIVE JEZERO', 'Sol 1 after impact · 07:40 local solar time', 6500);
-        this.say(OPENING);
-        this._enterMission(true);
-      }, 900);
+      this._wakeUp(fromBlack);
+    }
+  }
+
+  /* ============================================================ wake-up ==
+   * The night passes in black: three typed lines, a SOL 1 stamp, a heartbeat.
+   * Then the eyes open - twice they fall shut - through a blurred red haze,
+   * lying on the ground looking up at a dawn sky. The suit alarm sounds, the
+   * HUD boots panel by panel, K-7 speaks, and the view rises to standing.
+   * Wall-clock timed, so a slow frame rate cannot drag it out. SPACE skips.
+   */
+  _wakeUp(fromBlack) {
+    this.paused = true;
+    const w = el('svWake');
+    w.innerHTML = `<div class="blk"></div><div class="lid t"></div><div class="lid b"></div><div class="haze"></div>
+      <div class="txt"><p></p><p></p><p></p></div>
+      <div class="stamp"><h1>SOL 1</h1><h2>07:40 LOCAL SOLAR TIME &nbsp;\u00b7&nbsp; JEZERO CRATER</h2></div>
+      <div class="skip">SPACE \u00b7 SKIP</div>`;
+    w.className = 'on' + (fromBlack ? ' instant' : '');
+    void w.offsetWidth;
+    w.classList.add('dark');
+    document.body.classList.add('svBoot');
+    for (const id of ['navPanel', 'marsPanel', 'svLife', 'svMission', 'srcNote', 'crosshair']) el(id)?.classList.remove('svBooted');
+    const q = w.querySelector.bind(w);
+    const lids = [q('.lid.t'), q('.lid.b')], haze = q('.haze'), lines = q('.txt').children;
+    const lid = (open, dur) => {
+      for (const l of lids) { l.style.transitionDuration = dur + 's'; l.style.transform = `translateY(${(l.classList.contains('t') ? -1 : 1) * open * 104}%)`; }
+    };
+    const boot = id => { const e = el(id); if (e) { e.classList.remove('svBooted'); void e.offsetWidth; e.classList.add('svBooted'); } };
+    const type = (i, text) => {
+      for (const p of lines) if (p.textContent) p.classList.add('dim');
+      this.wake.typers.push({ el: lines[i], text, t0: this.wake.t, n: 0 });
+      lines[i].classList.add('typing');
+    };
+    const a = !fromBlack ? 2.0 : 0.8;          // the fade-down takes a moment when coming from the film
+    this.wake = { t0: performance.now() / 1000, t: 0, typers: [], rise: 0, cues: [
+      [a + 0.2, () => type(0, 'THE KESTREL BURNED UNTIL DARK.')],
+      [a + 2.6, () => type(1, 'OVERNIGHT IT FELL TO \u221283 \u00b0C. K-7 KEPT YOUR SUIT ALIVE ON ITS OWN RESERVE.')],
+      [a + 6.0, () => type(2, 'AT 06:12, THE RESERVE RAN DRY.')],
+      [a + 8.6, () => { q('.txt').classList.add('out'); q('.stamp').classList.add('show'); this._sound('swell'); }],
+      [a + 9.0, () => this._sound('beat')], [a + 9.9, () => this._sound('beat')], [a + 10.7, () => this._sound('beat')],
+      [a + 11.8, () => { q('.stamp').classList.remove('show'); w.classList.add('eyes'); lid(0, 0);
+                         haze.style.setProperty('--blur', '18px'); haze.style.setProperty('--tint', '0.55'); }],
+      [a + 12.2, () => { w.classList.add('open'); this._sound('breath'); }],
+      [a + 12.4, () => lid(0.32, 0.7)],
+      [a + 13.3, () => lid(0.0, 0.45)],
+      [a + 14.0, () => { lid(0.7, 0.8); this._sound('breath'); haze.style.setProperty('--blur', '10px'); haze.style.setProperty('--tint', '0.35'); }],
+      [a + 15.0, () => lid(0.52, 0.4)],
+      [a + 15.5, () => { lid(1.0, 1.2); haze.style.setProperty('--blur', '0px'); haze.style.setProperty('--tint', '0'); }],
+      [a + 15.9, () => { this._sound('alarm'); boot('svLife'); }],
+      [a + 16.5, () => boot('navPanel')],
+      [a + 16.9, () => { boot('marsPanel'); this.say([['K-7', 'Commander? Easy\u2026 your suit is on its last reserve. Get up \u2014 slowly.']]); }],
+      [a + 17.3, () => { this.wake.riseT0 = this.wake.t; }],
+      [a + 18.2, () => { boot('srcNote'); boot('crosshair'); }],
+      [a + 20.3, () => this._wakeDone()],
+    ] };
+    this.wake.end = a + 20.3;
+    this._wakeKey = e => {
+      // a held SPACE from skipping the film must not also skip this
+      if (!this.wake || e.repeat || (e.code !== 'Space' && e.code !== 'Enter')) return;
+      e.preventDefault(); e.stopPropagation();
+      this.wake.skip = true;
+    };
+    addEventListener('keydown', this._wakeKey, true);
+  }
+
+  _updateWake() {
+    const W = this.wake;
+    W.t = performance.now() / 1000 - W.t0;
+    if (W.skip) {                     // run every remaining cue silently and at once
+      W.silent = true;
+      while (W.cues.length) W.cues.shift()[1]();
+      return;
+    }
+    while (W.cues.length && W.cues[0][0] <= W.t) W.cues.shift()[1]();
+    if (!this.wake) return;
+    for (const ty of W.typers) {
+      const n = Math.min(ty.text.length, Math.floor((W.t - ty.t0) * 30));
+      if (n !== ty.n) {
+        ty.n = n; ty.el.textContent = ty.text.slice(0, n);
+        if (ty.text[n - 1] && ty.text[n - 1] !== ' ') this._sound('tick');
+        if (n >= ty.text.length) ty.el.classList.remove('typing');
+      }
+    }
+    W.typers = W.typers.filter(ty => ty.n < ty.text.length);
+    W.rise = W.riseT0 === undefined ? 0 : Math.min(1, (W.t - W.riseT0) / 3.0);
+  }
+
+  _wakeDone() {
+    const w = el('svWake');
+    removeEventListener('keydown', this._wakeKey, true);
+    const silent = this.wake?.silent;
+    this.wake = null;
+    w.classList.add('gone');
+    setTimeout(() => { w.className = ''; w.innerHTML = ''; }, 900);
+    for (const id of ['navPanel', 'marsPanel', 'svLife', 'srcNote', 'crosshair']) el(id)?.classList.add('svBooted');
+    this.paused = false;
+    this._banner('PART TWO', 'SURVIVE JEZERO', 'Sol 1 after impact \u00b7 07:40 local solar time', 6500);
+    if (!silent) this._sound('braam');
+    this.say(OPENING);
+    this._enterMission(true);
+    setTimeout(() => {
+      const m = el('svMission'); m.classList.remove('svBooted'); void m.offsetWidth; m.classList.add('svBooted');
+      document.body.classList.remove('svBoot');
+    }, 900);
+  }
+
+  /** Small synthesised cues for the wake-up, on the suit audio's context. */
+  _sound(kind) {
+    const a = this.audio;
+    if (!a || !a.ready || !a.enabled || this.wake?.silent) return;
+    const ctx = a.ctx, t = ctx.currentTime, out = a.master;
+    const tone = (type, f0, f1, dur, level, at = 0) => {
+      const o = ctx.createOscillator(), g = ctx.createGain();
+      o.type = type; o.frequency.setValueAtTime(f0, t + at); o.frequency.exponentialRampToValueAtTime(f1, t + at + dur);
+      g.gain.setValueAtTime(0.0001, t + at); g.gain.exponentialRampToValueAtTime(level, t + at + 0.015);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + at + dur);
+      o.connect(g).connect(out); o.start(t + at); o.stop(t + at + dur + 0.05);
+    };
+    const noise = (dur, f0, f1, level, type = 'lowpass', at = 0) => {
+      const len = Math.ceil(ctx.sampleRate * dur), buf = ctx.createBuffer(1, len, ctx.sampleRate), d = buf.getChannelData(0);
+      for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+      const src = ctx.createBufferSource(), f = ctx.createBiquadFilter(), g = ctx.createGain();
+      src.buffer = buf; f.type = type;
+      f.frequency.setValueAtTime(f0, t + at); f.frequency.exponentialRampToValueAtTime(f1, t + at + dur);
+      g.gain.setValueAtTime(0.0001, t + at); g.gain.exponentialRampToValueAtTime(level, t + at + dur * 0.45);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + at + dur);
+      src.connect(f).connect(g).connect(out); src.start(t + at);
+    };
+    switch (kind) {
+      case 'tick': tone('square', 1900, 1700, 0.018, 0.006); break;
+      case 'beat': tone('sine', 62, 38, 0.28, 0.5); tone('sine', 58, 36, 0.22, 0.32, 0.24); break;
+      case 'breath': noise(1.4, 500, 1400, 0.05, 'bandpass'); noise(1.8, 1300, 380, 0.035, 'bandpass', 1.5); break;
+      case 'swell': noise(3.0, 120, 1600, 0.06, 'bandpass'); tone('sine', 41, 41, 3.2, 0.12); break;
+      case 'alarm': for (let i = 0; i < 4; i++) { tone('square', 988, 988, 0.12, 0.03, i * 0.32); tone('square', 740, 740, 0.12, 0.03, i * 0.32 + 0.14); } break;
+      case 'braam':
+        for (const [hz, dt] of [[36.7, -7], [36.7, 6], [55, -4], [73.4, 5]]) {
+          const o = ctx.createOscillator(), f = ctx.createBiquadFilter(), g = ctx.createGain();
+          o.type = 'sawtooth'; o.frequency.value = hz; o.detune.value = dt;
+          f.type = 'lowpass'; f.Q.value = 3;
+          f.frequency.setValueAtTime(140, t); f.frequency.exponentialRampToValueAtTime(1000, t + 0.35); f.frequency.exponentialRampToValueAtTime(160, t + 4.5);
+          g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.035, t + 0.12); g.gain.exponentialRampToValueAtTime(0.0001, t + 5);
+          o.connect(f).connect(g).connect(out); o.start(t); o.stop(t + 5.1);
+        }
+        tone('sine', 60, 22, 3.2, 0.35);
+        break;
     }
   }
 
@@ -545,7 +685,7 @@ export class Survival {
   /* ================================================================ input == */
   /** E pressed. Returns true if a station used it (so the hands do not grab). */
   interact() {
-    if (!this.running || this.ending || this.journalOpen) return false;
+    if (!this.running || this.ending || this.journalOpen || this.paused) return false;
     if (this.actions.state === 'carry' || this.actions.candidate?.story) return false;
     const s = this._station;
     if (!s) return false;
@@ -574,6 +714,7 @@ export class Survival {
 
   /** Camera hook for the ending. Returns true when it drove the camera. */
   driveCamera(cam) {
+    if (this.wake) return this._wakeCamera(cam);
     const e = this.ending;
     if (!e || !this.modules.capsule) return false;
     const c = this.anchors.capsule, body = this.modules.capsule.userData.body;
@@ -584,7 +725,30 @@ export class Survival {
     return true;
   }
 
-  get hidePlayer() { return !!this.ending; }
+  /** Lying on your back looking at the dawn sky, then rising into the gameplay view. */
+  _wakeCamera(cam) {
+    const W = this.wake, P = this.player.pos;
+    const yaw = this.player.yaw, fx = Math.sin(yaw), fz = Math.cos(yaw);
+    const g = this.hf.heightAt(P.x, P.z);
+    const tilt = clamp((W.t - 13) / 5, 0, 1);
+    const pitch = 1.12 - 0.42 * tilt * tilt;                     // eyes drift down from the zenith
+    const roll = Math.sin(W.t * 0.6) * 0.06 + 0.12;              // head lolled to one side
+    this._wakeCam = this._wakeCam || new THREE.PerspectiveCamera();
+    const lc = this._wakeCam;
+    lc.position.set(P.x - fx * 0.35, g + 0.34, P.z - fz * 0.35);
+    lc.up.set(0, 1, 0);
+    lc.lookAt(lc.position.x + fx * Math.cos(pitch), lc.position.y + Math.sin(pitch), lc.position.z + fz * Math.cos(pitch));
+    lc.rotateZ(roll * (1 - W.rise));
+    const k = W.rise * W.rise * (3 - 2 * W.rise);               // smoothstep
+    // a little stumble as you get up
+    const bob = Math.sin(k * Math.PI) * 0.25;
+    cam.position.lerpVectors(lc.position, cam.position, k);
+    cam.position.y += bob * (1 - k);
+    cam.quaternion.slerpQuaternions(lc.quaternion, cam.quaternion, k);
+    return true;
+  }
+
+  get hidePlayer() { return !!this.ending || (!!this.wake && this.wake.rise < 0.35); }
 
   /** Mars seconds per real second the world clock should run at, or null when the story is not driving it. */
   clockRate() {
@@ -619,6 +783,7 @@ export class Survival {
   /* ================================================================ update == */
   update(dt, ctx) {
     if (!this.running) return;
+    if (this.wake) this._updateWake();
     const sunEl = ctx.sunElevation ?? 0;
     this._animate(dt, sunEl);
     this._updateRadio();
@@ -1085,6 +1250,9 @@ export class Survival {
     const journal = document.createElement('div');
     journal.id = 'svJournal';
     document.body.appendChild(journal);
+    const wake = document.createElement('div');
+    wake.id = 'svWake';
+    document.body.appendChild(wake);
     const end = document.createElement('div');
     end.id = 'svEnd';
     document.body.appendChild(end);

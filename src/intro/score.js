@@ -218,6 +218,37 @@ export class Score {
     crackle();
   }
 
+  /** A rising swell of filtered air, leading into a reveal. */
+  swell(seconds) {
+    if (this.stopped) return;
+    const ctx = this.ctx, t = ctx.currentTime;
+    const n = this._noise(t, seconds + 0.2), f = ctx.createBiquadFilter(), g = ctx.createGain();
+    f.type = 'bandpass'; f.Q.value = 0.7;
+    f.frequency.setValueAtTime(180, t); f.frequency.exponentialRampToValueAtTime(2200, t + seconds);
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.16, t + seconds * 0.92);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + seconds + 0.2);
+    n.connect(f).connect(g).connect(this.sfx); g.connect(this.reverb);
+  }
+
+  /** The title hit: a low, detuned brass-like swell over a sub boom. */
+  braam() {
+    if (this.stopped) return;
+    const ctx = this.ctx, t = ctx.currentTime;
+    const f = ctx.createBiquadFilter(), g = ctx.createGain();
+    f.type = 'lowpass'; f.Q.value = 3;
+    f.frequency.setValueAtTime(140, t); f.frequency.exponentialRampToValueAtTime(1100, t + 0.35);
+    f.frequency.exponentialRampToValueAtTime(160, t + 4.5);
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.11, t + 0.12);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 5.5);
+    f.connect(g).connect(this.sfx); g.connect(this.reverb);
+    for (const [hz, det] of [[36.7, -7], [36.7, 6], [55, -4], [73.4, 5]]) {
+      const o = ctx.createOscillator();
+      o.type = 'sawtooth'; o.frequency.value = hz; o.detune.value = det;
+      o.connect(f); o.start(t); o.stop(t + 5.6);
+    }
+    this._boom(t, { f0: 60, f1: 22, dur: 3.5, level: 0.45, lp: 180 });
+  }
+
   /** Fireball overhead on Mars: a low-passed whoosh, louder as it nears. */
   whoosh(seconds) {
     if (this.stopped) return;
