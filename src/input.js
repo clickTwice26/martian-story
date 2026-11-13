@@ -42,12 +42,15 @@ export const ACTION_DEFS = {
   defend:    { label: 'Defend (hold)', def: ['KeyX', 'Mouse2'] },
   grab:      { label: 'Use / Grab / Drop', def: ['KeyE', ''] },
   journal:   { label: 'Mission Journal', def: ['KeyJ', ''] },
+  mineralMap:{ label: 'Toggle CRISM Mineral Map', def: ['KeyK', ''] },
+  roverData: { label: 'Rover Data Here (photos, radar, weather)', def: ['KeyP', ''] },
   openMenu:  { label: 'Open Settings',  def: ['Escape', ''] },
 };
 
 const EDGE_ACTIONS = ['toggleView', 'surveyMode', 'respawn', 'roverTrack',
                       'gapOverlay', 'headBob', 'mute', 'timeBack', 'timeFwd',
-                      'sensDown', 'sensUp', 'cycleRT', 'companion', 'punch', 'grab', 'journal'];
+                      'sensDown', 'sensUp', 'cycleRT', 'companion', 'punch', 'grab', 'journal',
+                      'mineralMap', 'roverData'];
 
 /* Standard-mapping gamepad buttons for the character actions:
    X / Square punches, Y / Triangle grabs, LB blocks while held. */

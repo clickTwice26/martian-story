@@ -178,6 +178,9 @@
   #navPanel{top:16px;left:18px;min-width:236px}
   #perfPanel{top:16px;right:18px;min-width:196px}
   #solPanel{bottom:44px;left:18px;min-width:240px;max-width:44vw}
+  #envPanel{bottom:150px;left:18px;min-width:236px}
+  body.story #envPanel{left:auto;right:18px;bottom:44px}
+  @media (max-width:880px){#envPanel{left:auto;right:18px;bottom:44px}}
   #solPanel .big{font-family:"Orbitron",sans-serif;font-size:14px;font-weight:700;color:#38bdf8;letter-spacing:.12em;margin-bottom:4px}
 
   #keysPanel{bottom:44px;right:18px;color:#94a3b8;line-height:1.95;text-align:right;max-width:min(340px,44vw);
@@ -556,45 +559,62 @@
   #svEnd .hint{margin-top:24px;font-family:"Orbitron",sans-serif;font-size:11px;letter-spacing:.3em;color:#64748b}
 
   /* NASA Perseverance Science Dossier Modal */
-  #perseveranceModal{position:fixed;inset:0;z-index:48;display:none;align-items:center;justify-content:center;
+  #perseveranceModal,#roverDataModal{position:fixed;inset:0;z-index:48;display:none;align-items:center;justify-content:center;
     background:rgba(4,7,12,.86);backdrop-filter:blur(16px)}
-  #perseveranceModal.open{display:flex}
-  #perseveranceModal .p-panel{width:min(1060px,95vw);height:min(730px,92vh);display:flex;flex-direction:column;
+  #perseveranceModal.open,#roverDataModal.open{display:flex}
+  #roverDataModal .rd-lead{color:#ffedd5;font-size:12.5px;margin:4px 0 8px}
+  #roverDataModal .rd-note{color:#94a3b8;font-size:11px;line-height:1.55;margin:6px 0 10px}
+  #roverDataModal .rd-photos{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  #roverDataModal figure{margin:0;background:#0b0705;border:1px solid rgba(251,146,60,.2);border-radius:6px;overflow:hidden}
+  #roverDataModal figure img{display:block;width:100%;aspect-ratio:4/3;object-fit:cover}
+  #roverDataModal figure.off img,#roverDataModal .rd-radar.off img{display:none}
+  #roverDataModal figure.off::before,#roverDataModal .rd-radar.off::before{content:"Image unavailable offline";display:block;padding:40px 10px;text-align:center;color:#64748b;font-size:11px}
+  #roverDataModal figcaption{font-size:10.5px;color:#cbd5e1;padding:6px 8px;letter-spacing:.06em}
+  #roverDataModal .rd-radar{display:block;height:300px;overflow:hidden;border:1px solid rgba(251,146,60,.2);border-radius:6px;background:#fff}
+  #roverDataModal .rd-radar img{width:100%;display:block}
+  #roverDataModal .rd-bar{display:grid;grid-template-columns:130px 1fr 40px;gap:10px;align-items:center;font-size:12px;color:#cbd5e1;margin:5px 0}
+  #roverDataModal .rd-bar i{height:7px;border-radius:4px;background:linear-gradient(90deg,var(--c) var(--v),rgba(255,255,255,.08) var(--v))}
+  #roverDataModal .rd-bar b{font-family:"Share Tech Mono",monospace;color:#fed7aa;font-weight:400;text-align:right}
+  @media (max-width:760px){#roverDataModal .p-body{flex-direction:column;overflow-y:auto}#roverDataModal .rd-photos{grid-template-columns:1fr}}
+  #envPanel .hint span{color:#94a3b8;font-size:10px}
+  #roverDataModal .p-body{overflow-y:auto}
+  #roverDataModal .p-col{min-height:min-content}
+  #perseveranceModal .p-panel,#roverDataModal .p-panel{width:min(1060px,95vw);height:min(730px,92vh);display:flex;flex-direction:column;
     background:linear-gradient(180deg,#0a111b 0%,#060a12 100%);border:1px solid rgba(251,146,60,.35);
     border-top:3px solid #fb923c;box-shadow:0 30px 90px rgba(0,0,0,.9),0 0 30px rgba(251,146,60,.12);
     border-radius:3px;overflow:hidden}
-  #perseveranceModal .p-hdr{display:flex;align-items:center;gap:16px;padding:16px 24px;
+  #perseveranceModal .p-hdr,#roverDataModal .p-hdr{display:flex;align-items:center;gap:16px;padding:16px 24px;
     background:rgba(12,18,28,.8);border-bottom:1px solid rgba(251,146,60,.22)}
-  #perseveranceModal .p-badge{font-family:"Orbitron",sans-serif;font-size:9.5px;letter-spacing:.28em;
+  #perseveranceModal .p-badge,#roverDataModal .p-badge{font-family:"Orbitron",sans-serif;font-size:9.5px;letter-spacing:.28em;
     color:#fb923c;font-weight:700;padding:3px 8px;border:1px solid rgba(251,146,60,.4);border-radius:2px;
     background:rgba(251,146,60,.1)}
-  #perseveranceModal .p-hdr h2{font-family:"Orbitron",sans-serif;font-size:14px;letter-spacing:.26em;
+  #perseveranceModal .p-hdr h2,#roverDataModal .p-hdr h2{font-family:"Orbitron",sans-serif;font-size:14px;letter-spacing:.26em;
     color:#ffedd5;font-weight:700;margin:0}
-  #perseveranceModal .p-hdr span{color:#94a3b8;font-size:11px;letter-spacing:.12em}
-  #perseveranceModal .p-close{margin-left:auto;background:rgba(24,18,12,.6);color:#fed7aa;
+  #perseveranceModal .p-hdr span,#roverDataModal .p-hdr span{color:#94a3b8;font-size:11px;letter-spacing:.12em}
+  #perseveranceModal .p-close,#roverDataModal .p-close{margin-left:auto;background:rgba(24,18,12,.6);color:#fed7aa;
     border:1px solid rgba(251,146,60,.35);padding:6px 14px;font-family:inherit;font-size:11px;
     font-weight:600;letter-spacing:.14em;cursor:pointer;border-radius:3px;transition:all .15s}
-  #perseveranceModal .p-close:hover{background:rgba(251,146,60,.25);color:#fff;border-color:#fb923c}
-  #perseveranceModal .p-body{flex:1;display:flex;min-height:0;overflow:hidden}
-  #perseveranceModal .p-col{flex:1;overflow-y:auto;padding:20px 24px 28px}
-  #perseveranceModal .p-col.p-inst{flex:1.2;border-left:1px solid rgba(251,146,60,.18)}
-  #perseveranceModal h3{font-family:"Orbitron",sans-serif;font-size:11px;letter-spacing:.22em;color:#fb923c;
+  #perseveranceModal .p-close:hover,#roverDataModal .p-close:hover{background:rgba(251,146,60,.25);color:#fff;border-color:#fb923c}
+  #perseveranceModal .p-body,#roverDataModal .p-body{flex:1;display:flex;min-height:0;overflow:hidden}
+  #perseveranceModal .p-col,#roverDataModal .p-col{flex:1;overflow-y:auto;padding:20px 24px 28px}
+  #perseveranceModal .p-col.p-inst,#roverDataModal .p-col.p-inst{flex:1.2;border-left:1px solid rgba(251,146,60,.18)}
+  #perseveranceModal h3,#roverDataModal h3{font-family:"Orbitron",sans-serif;font-size:11px;letter-spacing:.22em;color:#fb923c;
     margin:16px 0 10px;text-transform:uppercase;display:flex;align-items:center;gap:8px}
-  #perseveranceModal h3:first-child{margin-top:0}
-  #perseveranceModal h3::before{content:"";display:inline-block;width:4px;height:4px;background:#fb923c;border-radius:1px}
-  #perseveranceModal table{width:100%;font-size:12px;border-collapse:collapse;margin-top:6px}
-  #perseveranceModal td{padding:7px 0;border-bottom:1px solid rgba(255,255,255,.06);color:#cbd5e1}
-  #perseveranceModal td:last-child{text-align:right;color:#fed7aa;font-family:"Share Tech Mono",monospace}
-  #perseveranceModal .p-item{border-left:2px solid #fb923c;padding:6px 0 6px 14px;margin-bottom:14px;
+  #perseveranceModal h3:first-child,#roverDataModal h3:first-child{margin-top:0}
+  #perseveranceModal h3::before,#roverDataModal h3::before{content:"";display:inline-block;width:4px;height:4px;background:#fb923c;border-radius:1px}
+  #perseveranceModal table,#roverDataModal table{width:100%;font-size:12px;border-collapse:collapse;margin-top:6px}
+  #perseveranceModal td,#roverDataModal td{padding:7px 0;border-bottom:1px solid rgba(255,255,255,.06);color:#cbd5e1}
+  #perseveranceModal td:last-child,#roverDataModal td:last-child{text-align:right;color:#fed7aa;font-family:"Share Tech Mono",monospace}
+  #perseveranceModal .p-item,#roverDataModal .p-item{border-left:2px solid #fb923c;padding:6px 0 6px 14px;margin-bottom:14px;
     background:rgba(251,146,60,.03)}
-  #perseveranceModal .p-item h4{font-family:"Orbitron",sans-serif;font-size:12px;color:#ffedd5;margin:0 0 4px;
+  #perseveranceModal .p-item h4,#roverDataModal .p-item h4{font-family:"Orbitron",sans-serif;font-size:12px;color:#ffedd5;margin:0 0 4px;
     letter-spacing:.08em}
-  #perseveranceModal .p-item p{font-size:11.5px;line-height:1.6;color:#cbd5e1;margin:0}
-  #perseveranceModal .p-item .sub{font-size:10px;color:#f97316;letter-spacing:.12em;font-family:"Orbitron",sans-serif}
-  #perseveranceModal .p-source{margin-top:18px;padding:12px 14px;background:rgba(15,23,42,.6);
+  #perseveranceModal .p-item p,#roverDataModal .p-item p{font-size:11.5px;line-height:1.6;color:#cbd5e1;margin:0}
+  #perseveranceModal .p-item .sub,#roverDataModal .p-item .sub{font-size:10px;color:#f97316;letter-spacing:.12em;font-family:"Orbitron",sans-serif}
+  #perseveranceModal .p-source,#roverDataModal .p-source{margin-top:18px;padding:12px 14px;background:rgba(15,23,42,.6);
     border:1px solid rgba(56,189,248,.2);border-radius:3px;font-size:11px;color:#94a3b8;line-height:1.6}
-  #perseveranceModal .p-source a{color:#38bdf8;text-decoration:none}
-  #perseveranceModal .p-source a:hover{text-decoration:underline}
+  #perseveranceModal .p-source a,#roverDataModal .p-source a{color:#38bdf8;text-decoration:none}
+  #perseveranceModal .p-source a:hover,#roverDataModal .p-source a:hover{text-decoration:underline}
 
   @media (max-width:1250px){
     #svMission{top:190px}
@@ -674,6 +694,16 @@
     <div class="sub" id="hudMarsSub">—</div>
   </div>
 
+  <div class="panel" id="envPanel" style="display:none">
+    <h3>ENVIRONMENT · MEDA / CRISM</h3>
+    <div class="row"><span>AIR</span><span id="hudAir">—</span></div>
+    <div class="row"><span>GROUND</span><span id="hudGround">—</span></div>
+    <div class="row"><span>PRESSURE</span><span id="hudPress">—</span></div>
+    <div class="row"><span>WIND</span><span id="hudWind">—</span></div>
+    <div class="row"><span>SPECTRA</span><span id="hudMineral">—</span></div>
+    <div class="row hint"><span><b>K</b> mineral map · <b>P</b> rover data here</span></div>
+  </div>
+
   <div class="panel" id="perfPanel">
     <h3>RENDER</h3>
     <div class="row"><span>FPS</span><span id="hudFps">—</span></div>
@@ -745,6 +775,39 @@
 </div>
 
 <div id="settings"></div>
+
+<div id="roverDataModal">
+  <div class="p-panel">
+    <div class="p-hdr">
+      <div class="p-badge">NASA · USGS · PDS</div>
+      <h2>ROVER DATA HERE</h2>
+      <span id="rdWhere">—</span>
+      <button id="rdCloseBtn" class="p-close" type="button">CLOSE [P / ESC]</button>
+    </div>
+    <div class="p-body">
+      <div class="p-col">
+        <h3>WHAT PERSEVERANCE SAW</h3>
+        <div id="rdPhotos"></div>
+        <h3>WHAT RIMFAX HEARD UNDERGROUND</h3>
+        <div id="rdRadar"></div>
+      </div>
+      <div class="p-col p-inst">
+        <h3>WEATHER · MEDA</h3>
+        <div id="rdMeda"></div>
+        <h3>MINERALS FROM ORBIT · CRISM</h3>
+        <div id="rdCrism"></div>
+        <div class="p-source">
+          <b>Sources (all free, no login):</b><br/>
+          Albedo: USGS Mars 2020 TRN HiRISE orthomosaic (25 cm)<br/>
+          Horizon: JPL/USGS CTX DEM of Jezero (20 m), MGS MOLA (463 m), CTX orthomosaic<br/>
+          Weather: Mars 2020 MEDA, PDS Atmospheres Node<br/>
+          Minerals: MRO CRISM MTRDR, PDS Geosciences Node<br/>
+          Radar: Mars 2020 RIMFAX, PDS Geosciences Node · Photos: NASA/JPL-Caltech raw images
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
 
 <div id="perseveranceModal">
   <div class="p-panel">

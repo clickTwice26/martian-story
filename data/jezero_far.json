@@ -1,0 +1,42 @@
+{
+  "name": "jezero_far",
+  "width": 1200,
+  "height": 1200,
+  "metresPerPixel": 80.0,
+  "widthMetres": 96000.0,
+  "heightMetres": 96000.0,
+  "elevMin": -3094.339599609375,
+  "elevMax": -675.889404296875,
+  "elevEncoding": "uint16 linear; metres = elevMin + v/65535*(elevMax-elevMin)",
+  "projected": {
+    "xLeft": 4537520.0,
+    "yTop": 1142400.0
+  },
+  "lonLeft": 76.55070695579496,
+  "lonRight": 78.17028502217403,
+  "latTop": 19.272978989910825,
+  "latBottom": 17.653400923531766,
+  "ctxCoverage": 0.7241666666666666,
+  "albedo": {
+    "file": "jezero_far_albedo.jpg",
+    "width": 2400,
+    "height": 2400,
+    "metresPerPixel": 40.0,
+    "encoding": "8-bit; relative albedo = value/128; 0 = none",
+    "validFraction": 0.7093743055555556
+  },
+  "sources": [
+    {
+      "name": "JPL/USGS Mars 2020 CTX DEM of Jezero crater, 20 m",
+      "url": "https://asc-pds-services.s3.us-west-2.amazonaws.com/mosaic/mars2020_trn/CTX/ScienceInvestigationMaps_JPL/M20_JezeroCrater_CTXDEM_20m.tif"
+    },
+    {
+      "name": "MGS MOLA global DEM, 463 m (fill west of the CTX DEM)",
+      "url": "https://asc-pds-services.s3.us-west-2.amazonaws.com/mosaic/Mars_MGS_MOLA_DEM_mosaic_global_463m.tif"
+    },
+    {
+      "name": "JPL/USGS Mars 2020 CTX orthomosaic of Jezero crater, 5 m (albedo)",
+      "url": "https://asc-pds-services.s3.us-west-2.amazonaws.com/mosaic/mars2020_trn/CTX/ScienceInvestigationMaps_JPL/M20_JezeroCrater_CTXortho_mosaic_5m.tif"
+    }
+  ]
+}

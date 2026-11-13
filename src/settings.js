@@ -158,8 +158,28 @@ export const SCHEMA = {
     },
     gapOverlay: {
       label: 'Mark Interpolated Terrain', type: 'toggle', def: true,
-      hint: '9.3% of this tile is gap-filled between HiRISE stereo pairs. Shown desaturated when on.',
+      hint: '9.3% of this tile has no HiRISE stereo coverage. It is filled from the coarser CTX stereo model (20 m) and shown desaturated when on.',
       apply: (v, c) => { c.terrain.material.uniforms.uMaskStrength.value = v ? 1 : 0; },
+    },
+    realAlbedo: {
+      label: 'Real Surface Brightness (HiRISE)', type: 'slider', min: 0, max: 1, step: 0.05, def: 1,
+      hint: 'Ground brightness from the HiRISE orthomosaic (25 cm, slope shading removed): dark sand, pale bedrock and the delta where they really are. 0 = procedural surface only.',
+      apply: (v, c) => { const u = c.terrain.material.uniforms; u.uAlbedoOn.value = u.uAlbedo.value ? v : 0; },
+    },
+    farTerrain: {
+      label: 'Crater Rim on the Horizon', type: 'toggle', def: true,
+      hint: 'The rest of Jezero beyond the HiRISE tile, from the JPL CTX elevation model (20 m) and MOLA, so the real crater rim stands on the horizon.',
+      apply: (v, c) => { if (c.farTerrain) c.farTerrain.visible = v; },
+    },
+    mineralOverlay: {
+      label: 'CRISM Mineral Map', type: 'toggle', def: false,
+      hint: 'Orbital spectroscopy from MRO CRISM painted on the ground: green olivine, gold Mg-carbonate, blue hydrated minerals. Indicators, not identifications. Key: K.',
+      apply: (v, c) => { c.terrain.material.uniforms.uMineralOn.value = c.terrain.material.uniforms.uMinerals.value && v ? 1 : 0; },
+    },
+    realWeather: {
+      label: 'Weather from MEDA', type: 'toggle', def: true,
+      hint: "Air and ground temperature, pressure and wind from Perseverance's own weather station, for the current season and hour.",
+      apply: () => {},
     },
     companion: {
       label: 'Support Unit', type: 'toggle', def: true,

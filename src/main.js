@@ -16,6 +16,7 @@ import { CharacterActions, LIFT_MAX } from './actions.js';
 import { Interactables, PropSet, RockSource } from './interact.js';
 import { Intro, WreckSite, crashLayout, INTRO_LMST } from './intro/intro.js';
 import { Survival } from './survival/survival.js';
+import { loadSurfaceData, loadFarTerrain, loadFarSource, fillGapsFromFar, MarsWeather, RoverMedia, K_TO_C } from './realdata.js';
 import { siteTime, missionSol, season, formatSolClock, sunDirection,
          utcForSolAndLmst, JEZERO, SOL_SECONDS } from './marstime.js';
 
@@ -140,6 +141,9 @@ let perseverance = null, perseveranceModalOpen = false;
 let props, interactables, actions, grabMarker;
 let wreck = null, intro = null, crash = null;
 let survival = null, survivalModal = false;
+/* Free NASA/USGS layers (see realdata.js); each stays null if its file is missing. */
+let farTerrain = null, minerals = null, weather = null, media = null, weatherNow = null;
+let roverDataOpen = false;
 const SPAWN = { x: 0, z: 0, yaw: 2.3 };
 /* Shared with the overlay materials so the rover track bends with the ground
    instead of floating off it at range. */
@@ -196,6 +200,16 @@ async function boot() {
 
   status('Loading DTM validity mask…');
   mask = await loadMask('data/jezero_base_mask.png');
+  bar(0.84);
+
+  // The 9.3% of the tile without HiRISE stereo was filled by smearing the
+  // nearest value; measured CTX stereo (20 m) is a far better stand-in.
+  status('Filling HiRISE stereo gaps with CTX elevation…');
+  const farSrc = await loadFarSource().catch(e => { console.warn('[realdata] CTX far field unavailable:', e.message); return null; });
+  if (farSrc) {
+    const g = fillGapsFromFar(hf, mask, meta, farSrc);
+    console.info('[realdata] %d gap texels now CTX-measured (datum offset %.2f m)', g.changed, g.datumOffset);
+  }
   bar(0.86);
 
   status('Building terrain quadtree…');
@@ -208,6 +222,17 @@ async function boot() {
   terrain.material.uniforms.uMaskSize.value.set(mask.width, mask.height);
   scene.add(terrain.mesh);
   lightCache = new LightCache(renderer, terrain);
+  bar(0.9);
+
+  status('Loading HiRISE albedo, CRISM minerals, crater rim, MEDA weather…');
+  const [surf, far, wx, med] = await Promise.all([
+    loadSurfaceData(terrain, meta),
+    loadFarTerrain(terrain, hf, meta, farSrc).catch(e => { console.warn('[realdata] far terrain unavailable:', e.message); return null; }),
+    MarsWeather.load().catch(e => { console.warn('[realdata] MEDA weather unavailable:', e.message); return null; }),
+    RoverMedia.load(projector).catch(e => { console.warn('[realdata] rover media unavailable:', e.message); return null; }),
+  ]);
+  minerals = surf.minerals; weather = wx; media = med;
+  if (far) { farTerrain = far; scene.add(far); }
   bar(0.93);
 
   status('Placing rover traverse…');
@@ -282,6 +307,7 @@ async function boot() {
     survival = new Survival({
       scene, hf, crash, wreck, player, companion, actions, props, audio, timeState, camera,
       isMeasured, notice: (m, ms) => showNotice(m, ms),
+      weather: () => weatherNow,
     });
     survival.onJournal = open => {
       survivalModal = open;
@@ -300,7 +326,7 @@ async function boot() {
   // ---- settings: bind to the live engine, then apply everything at once ----
   settings.bind({
     renderer, terrain, lightCache, sky, audio, camera, companion, perseverance, hf, rocks,
-    res, applyPixelRatio,
+    res, applyPixelRatio, farTerrain,
     curvature: uCurvatureC,
     settings: SETTINGS,
     traverseLine: window.__traverseLine,
@@ -382,6 +408,7 @@ async function boot() {
   input.deserialize(settings.get('keybinds'));
   paintInputBadge();
   el('m20CloseBtn')?.addEventListener('click', () => closePerseveranceModal());
+  el('rdCloseBtn')?.addEventListener('click', () => closeRoverData());
 
   el('startBtn').addEventListener('click', beginPlay);
   renderer.domElement.addEventListener('click', () => {
@@ -400,7 +427,8 @@ async function boot() {
   el('startOverlay').classList.remove('hidden');   // never un-hidden before: the bug
   if (lowPowerGPU) showNotice('Low-power GPU detected — using the Low quality preset. ESC → Settings to change it.', 7000);
   window.__mars = { THREE, scene, camera, renderer, hf, terrain, player, projector, intro, wreck, crash,
-                    waypoints, astronaut, audio, mask, SETTINGS, settings, timeState, input, companion, perseverance, rocks, lightCache, res,
+                    waypoints, astronaut, audio, mask, farTerrain, minerals, weather, media,
+                    get weatherNow() { return weatherNow; }, SETTINGS, settings, timeState, input, companion, perseverance, rocks, lightCache, res,
                     sky, sunLight, SUN_DIR, actions, props, interactables, survival,
                     openPerseveranceModal, closePerseveranceModal,
                     setMarsTime: (sol, lmst) => { timeState.sol = sol; timeState.lmst = lmst; },
@@ -652,6 +680,81 @@ function closePerseveranceModal() {
   if (begun) input.requestCapture();
 }
 
+/* ---- Rover data here: what Perseverance actually recorded near this spot ---- */
+const esc = t => String(t ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const compass = d => ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'][Math.round(d / 45) % 8];
+function openRoverData() {
+  if (roverDataOpen || !player) return;
+  roverDataOpen = true;
+  input.enabled = false;
+  input.clearKeys();
+  if (document.pointerLockElement) document.exitPointerLock();
+  const { x, z } = player.pos;
+  const [lon, lat] = projector.worldToLonLat(x, z);
+  el('rdWhere').textContent = `${lat.toFixed(5)}°N ${lon.toFixed(5)}°E`;
+
+  // CRISM
+  const m = minerals ? minerals.at(hf, x, z) : null;
+  el('rdCrism').innerHTML = minerals ? `
+    <div class="rd-lead">${esc(minerals.describe(m))}</div>
+    ${m ? ['olivine', 'carbonate', 'hydrated'].map((k, i) => `
+      <div class="rd-bar"><span>${['Olivine', 'Mg carbonate', 'Hydrated minerals'][i]}</span>
+      <i style="--v:${(m[k] * 100).toFixed(0)}%;--c:${['#3ddc84', '#f5c542', '#4f9bff'][i]}"></i><b>${m[k].toFixed(2)}</b></div>`).join('') : ''}
+    <p class="rd-note">MRO CRISM summary parameters (OLINDEX3, D2300 + BD2500_2, SINDEX2 / BD1900_2), 18 m/px from orbit.
+    Indicators, not identifications. Press K to paint them on the ground.</p>` : '<p class="rd-note">CRISM map not loaded.</p>';
+
+  // MEDA
+  const w = weatherNow;
+  const st = timeState.st;
+  const day = weather ? weather.daily(timeState.sol) : null;
+  el('rdMeda').innerHTML = w ? `
+    <table>
+      <tr><td>Air temperature</td><td>${K_TO_C(w.airT).toFixed(1)} °C</td></tr>
+      <tr><td>Ground temperature</td><td>${K_TO_C(w.groundT).toFixed(1)} °C</td></tr>
+      <tr><td>Pressure</td><td>${w.pressure.toFixed(0)} Pa (${(w.pressure / 100).toFixed(2)} mbar)</td></tr>
+      <tr><td>Wind</td><td>${w.wind != null ? w.wind.toFixed(1) + ' m/s' : '—'}${w.windDir != null ? ' from ' + Math.round(w.windDir) + '°' : ''}</td></tr>
+    </table>
+    <p class="rd-note">MEDA climatology for Ls ${st.ls.toFixed(0)}° at ${formatSolClock(timeState.lmst).slice(0, 5)} LMST,
+    from ${weather.d.solsSampled} sampled sols (${weather.d.solRange[0]}–${weather.d.solRange[1]}).</p>
+    ${day ? `<p class="rd-note">Logged on sol ${day.sol}: air ${K_TO_C(day.tMin).toFixed(0)} to ${K_TO_C(day.tMax).toFixed(0)} °C,
+    ground ${K_TO_C(day.gMin).toFixed(0)} to ${K_TO_C(day.gMax).toFixed(0)} °C, ${day.pMean?.toFixed(0)} Pa mean,
+    ${day.windMax != null ? `gusts to ${day.windMax.toFixed(1)} m/s` : 'no wind retrieval that sol'}.</p>` : ''}` : '<p class="rd-note">MEDA weather not loaded or turned off.</p>';
+
+  // Photos
+  const ph = media ? media.nearestPhoto(x, z, 400) : null;
+  el('rdPhotos').innerHTML = ph ? `
+    <div class="rd-lead">Sol ${ph.sol} · ${Math.round(ph.dist)} m from the waypoint where these were taken</div>
+    <div class="rd-photos">
+      ${[ph.mastcamz, ph.navcam].filter(Boolean).map(f => `
+        <figure><a href="${esc(f.large || f.medium)}" target="_blank" rel="noopener">
+        <img src="${esc(f.medium || f.small)}" alt="${esc(f.cam)} image, sol ${ph.sol}" loading="lazy"
+             onerror="this.closest('figure').classList.add('off')"></a>
+        <figcaption>${esc(f.cam.replace(/_/g, ' '))} · sol ${f.sol ?? ph.sol} · ${esc(f.date)}</figcaption></figure>`).join('')}
+    </div>
+    <p class="rd-note">NASA/JPL-Caltech raw images, loaded live from mars.nasa.gov. Click for full size.</p>`
+    : '<p class="rd-note">No rover waypoint within 400 m. Follow the rover track (T) to see what Perseverance saw.</p>';
+
+  // RIMFAX
+  const rf = media ? media.radarAt(x, z) : null;
+  el('rdRadar').innerHTML = rf ? `
+    <div class="rd-lead">Sol ${rf.sol}: RIMFAX sounded the ground right here</div>
+    <a href="${esc(rf.png)}" target="_blank" rel="noopener" class="rd-radar">
+      <img src="${esc(rf.png)}" alt="RIMFAX radargram, sol ${rf.sol}" loading="lazy" onerror="this.parentNode.classList.add('off')"></a>
+    <p class="rd-note">Ground-penetrating radar along the drive: depth runs down as two-way travel time (ns).
+    Bright banding is buried layering. PDS Geosciences Node, loaded live.</p>`
+    : `<p class="rd-note">Perseverance's RIMFAX radar did not sound this spot.${media ? ` It logged ${media.radar.length} drives; stand on the rover track to read one.` : ''}</p>`;
+
+  el('roverDataModal').classList.add('open');
+  audio.beep('mode');
+}
+function closeRoverData() {
+  if (!roverDataOpen) return;
+  roverDataOpen = false;
+  input.enabled = true;
+  el('roverDataModal').classList.remove('open');
+  if (begun) input.requestCapture();
+}
+
 /**
  * Pointer lock MUST be requested synchronously inside the user gesture.
  * The previous version awaited audio.start() first, which spent the gesture
@@ -733,6 +836,10 @@ function introDone(skipped) {
 }
 
 addEventListener('keydown', e => {
+  if (roverDataOpen) {
+    if (e.code === 'Escape' || e.code === 'KeyP') { e.preventDefault(); closeRoverData(); }
+    return;
+  }
   if (perseveranceModalOpen) {
     if (e.code === 'Escape' || e.code === 'KeyE') {
       e.preventDefault();
@@ -761,8 +868,9 @@ document.addEventListener('pointerlockchange', () => {
     hasCaptured = true;
     if (settingsOpen) { settingsOpen = false; input.enabled = true; el('settings').classList.remove('open'); }
     if (perseveranceModalOpen) { perseveranceModalOpen = false; el('perseveranceModal')?.classList.remove('open'); }
+    if (roverDataOpen) { roverDataOpen = false; input.enabled = true; el('roverDataModal')?.classList.remove('open'); }
     el('startOverlay').classList.add('hidden');
-  } else if (hasCaptured && !settingsOpen && !input.lockFailed && !survivalModal && !perseveranceModalOpen) {
+  } else if (hasCaptured && !settingsOpen && !input.lockFailed && !survivalModal && !perseveranceModalOpen && !roverDataOpen) {
     openSettings();
   }
   paintInputBadge();
@@ -826,6 +934,16 @@ function pollActions() {
     }
   }
   if (input.consume('journal') && survival && survival.running) survival.toggleJournal();
+  if (input.consume('mineralMap')) {
+    if (!minerals) showNotice('CRISM mineral map not loaded.', 2400);
+    else {
+      settings.set('mineralOverlay', !settings.get('mineralOverlay'));
+      showNotice(settings.get('mineralOverlay')
+        ? 'CRISM mineral map: green olivine · gold Mg-carbonate · blue hydrated minerals' : 'CRISM mineral map off', 3200);
+      audio.beep('mode');
+    }
+  }
+  if (input.consume('roverData')) openRoverData();
   if (input.consume('cycleRT')) {
     const tiers = ['Off', 'Low', 'Medium', 'High', 'Ultra'];
     const next = tiers[(tiers.indexOf(settings.get('rayTracing')) + 1) % tiers.length];
@@ -881,6 +999,14 @@ function updateMarsTimeAndSun(dt) {
   terrain.material.uniforms.uSkyColor.value.setHex(0xc79a6d).multiplyScalar(0.18 + 0.82 * day);
   terrain.material.uniforms.uFogColor.value.setHex(0xb98c63).multiplyScalar(0.16 + 0.84 * day);
   sky.material.uniforms.uOpacity.value = 0.10 + 0.90 * day;
+
+  // Perseverance's MEDA record for this season and hour drives the weather.
+  weatherNow = weather && settings.get('realWeather') ? weather.sample(st.ls, timeState.lmst) : null;
+  if (weatherNow && audio.windGain) {
+    // Exterior wind follows the measured speed (MEDA: ~1-10 m/s at Jezero).
+    const w = Math.max(0, weatherNow.wind || 0);
+    audio.windGain.gain.value = 0.05 * audio.windScale * (0.35 + Math.min(1.6, w / 5));
+  }
 
   // A dust storm: the sun dims, the haze closes in and turns ochre.
   const storm = survival ? survival.storm : 0;
@@ -1191,6 +1317,17 @@ function updateHUD() {
       `LMST · Ls ${st.ls.toFixed(1)}° ${season(st.ls)} · MY${st.marsYear} · SUN ${st.elevation.toFixed(1)}°`;
   }
 
+  // MEDA weather and the CRISM reading underfoot
+  if (weatherNow) {
+    el('hudAir').textContent = `${K_TO_C(weatherNow.airT).toFixed(0)} °C`;
+    el('hudGround').textContent = `${K_TO_C(weatherNow.groundT).toFixed(0)} °C`;
+    el('hudPress').textContent = `${weatherNow.pressure.toFixed(0)} Pa`;
+    el('hudWind').textContent = weatherNow.wind != null
+      ? `${weatherNow.wind.toFixed(1)} m/s${weatherNow.windDir != null ? ' ' + compass(weatherNow.windDir) : ''}` : '—';
+  }
+  el('envPanel').style.display = weatherNow || minerals ? '' : 'none';
+  if (minerals) el('hudMineral').textContent = minerals.describe(minerals.at(hf, player.pos.x, player.pos.z))
+    .replace(' signature', '').replace('Weak spectral signal: ', '');
 
   let best = null, bd = Infinity;
   for (const f of waypoints) {

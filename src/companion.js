@@ -17,6 +17,8 @@ import { GLTFLoader } from '../vendor/jsm/loaders/GLTFLoader.js';
 
 export const COMPANION_ROBOT_MODEL = 'vendor/models/RobotExpressive.glb';
 export const COMPANION_INGENUITY_MODEL = 'vendor/models/Ingenuity.glb';
+/* The cockpit pilot in the opening (intro/ship.js) is still the robot. */
+export const COMPANION_MODEL = COMPANION_ROBOT_MODEL;
 const TARGET_ROBOT_HEIGHT = 1.15;
 
 const LOCOMOTION = ['Idle', 'Walking', 'Running'];

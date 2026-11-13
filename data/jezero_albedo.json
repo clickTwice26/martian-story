@@ -1,0 +1,16 @@
+{
+  "name": "jezero_albedo",
+  "width": 8192,
+  "height": 4096,
+  "metresPerPixel": 2.0,
+  "encoding": "8-bit; relative albedo = value/128 (128 = tile median); <=3 = no image",
+  "validFraction": 0.907091498374939,
+  "source": "USGS Mars 2020 TRN HiRISE orthomosaic (JEZ_hirise_soc_006_orthoMosaic_25cm, first)",
+  "sourceUrl": "https://www.usgs.gov/data/mars-2020-terrain-relative-navigation-hirise-dtm-mosaic",
+  "processing": "block-averaged from 0.25 m, DTM-slope shading regressed out (log-linear Lambert), 400 m-scale brightness halved to suppress inter-image seams",
+  "covers": "jezero_base",
+  "projected": {
+    "xLeft": 4577366.0,
+    "yTop": 1098426.0
+  }
+}

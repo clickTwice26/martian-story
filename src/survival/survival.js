@@ -1324,7 +1324,9 @@ export class Survival {
     this._setRow('food', `${r.food.toFixed(r.food < 10 ? 1 : 0)} sols`, r.food / 60, this.m > 1 ? lv(r.food, 4, 1) : '');
     this._setRow('dose', `${r.dose.toFixed(1)} / ${DOSE_LIMIT} mSv`, r.dose / DOSE_LIMIT, r.dose >= DOSE_LIMIT ? 'crit' : r.dose > 540 ? 'warn' : '');
     const T = this._airTemp();
-    this._setRow('air', `${T.toFixed(0)} °C · ${this.storm > 0.2 ? 'DUST STORM' : '7 mbar CO₂'}`, (T + 90) / 80, this.storm > 0.2 ? 'warn' : '');
+    const wx = this.weather ? this.weather() : null;
+    const air = wx ? `${(wx.pressure / 100).toFixed(2)} mbar CO₂` : '7 mbar CO₂';
+    this._setRow('air', `${T.toFixed(0)} °C · ${this.storm > 0.2 ? 'DUST STORM' : air}`, (T + 90) / 80, this.storm > 0.2 ? 'warn' : '');
     this._setRow('prop', this.flag.campaign || r.propellant > 0 ? `${(r.propellant * 100).toFixed(1)} %` : '—',
       r.propellant, this.flag.campaign ? '' : 'off');
     el('svSol').textContent = `SOL ${this._crashSol()} · ${formatSolClock(this.timeState.lmst).slice(0, 5)}`;
@@ -1334,7 +1336,10 @@ export class Survival {
   }
 
   _airTemp() {
-    // Perseverance MEDA: about -55 C average, 50-60 C day-night swing
+    // Measured: Perseverance MEDA for this season and hour, when loaded
+    const wx = this.weather ? this.weather() : null;
+    if (wx && wx.airT) return wx.airT - 273.15 - 6 * this.storm;
+    // Fallback fit to MEDA: about -55 C average, 50-60 C day-night swing
     const l = this.timeState.lmst;
     return -55 + 28 * Math.cos((l - 14.5) / 24 * Math.PI * 2) - 6 * this.storm;
   }

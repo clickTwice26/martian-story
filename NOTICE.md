@@ -30,6 +30,30 @@ NASA MMGIS Mars 2020 traverse data: 703 waypoints and 556 drive segments through
 
 - https://mars.nasa.gov/mmgis-maps/M20/Layers/json/M20_waypoints.json
 
+At load time the game replaces those interpolated texels with the measured CTX
+elevation below (blended across the mask edge); the mask still marks them.
+
+## Surface brightness, horizon, minerals, weather, media — public domain (US Government)
+
+All free and without login. Produced by the scripts in `tools/`.
+
+- `data/jezero_albedo.jpg`, `data/jezero_albedo_near.jpg` — **USGS Mars 2020 TRN HiRISE
+  orthomosaic** `JEZ_hirise_soc_006_orthoMosaic_25cm_Eqc_latTs0_lon0_first`, same release
+  as the DTM. Block-averaged; slope shading regressed out against the DTM (`extract_ortho.py`).
+- `data/jezero_far.png`, `data/jezero_far_albedo.jpg` — **JPL/USGS Mars 2020 CTX DEM**
+  (`M20_JezeroCrater_CTXDEM_20m`) and **CTX orthomosaic** (`M20_JezeroCrater_CTXortho_mosaic_5m`),
+  plus the **MGS MOLA global DEM** (463 m) west of the CTX coverage (`extract_horizon.py`).
+  https://asc-pds-services.s3.us-west-2.amazonaws.com/mosaic/mars2020_trn/
+- `data/jezero_minerals.png` — **MRO CRISM MTRDR** browse products (MAF, CAR, HYD summary
+  parameters, Viviano-Beck et al. 2014) from six targeted observations, PDS Geosciences Node
+  (`extract_crism.py`). Spectral indicators, not mineral identifications.
+- `data/meda_climate.json` — **Mars 2020 MEDA** weather station (DER_PS, CAL_TIRS, DER_WS),
+  PDS Atmospheres Node, https://pds-atmospheres.nmsu.edu/PDS/data/PDS4/Mars2020/mars2020_meda/
+  (`build_meda.py`).
+- `data/m20_media.json` — links only: **Mars 2020 raw images** (NASA/JPL-Caltech,
+  mars.nasa.gov raw-image API) and **RIMFAX** annotated browse radargrams, PDS Geosciences
+  Node (`index_media.py`). The images load from those hosts at runtime.
+
 ## three.js — MIT
 
 `vendor/three.module.js`, `vendor/jsm/**` (r160), and the two rigged models:

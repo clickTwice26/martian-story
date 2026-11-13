@@ -297,6 +297,17 @@ uniform vec2  uMaskSize;
 uniform vec2  uAnchorF;
 uniform float uMPPF;
 uniform float uMaskStrength;
+// HiRISE orthomosaic albedo, same grid as the heightfield (value/128 = relative
+// albedo, <=3 = no image) plus a 0.5 m window around the landing site.
+uniform sampler2D uAlbedo;
+uniform vec2  uHeightSizeF;
+uniform float uAlbedoOn;         // 0 = procedural only, 1 = real albedo
+uniform sampler2D uAlbedoNear;
+uniform vec4  uNearRect;          // base-texel edge coords: x0, y0, size, 0
+// CRISM mineral indicators (r olivine, g carbonate, b hydrated, a coverage), 4x coarser than the mask
+uniform sampler2D uMinerals;
+uniform vec2  uMineralSize;
+uniform float uMineralOn;
 
 varying vec3 vWorld;
 varying vec3 vNormal;
@@ -348,10 +359,28 @@ void main() {
   vec3 rock = vec3(0.118, 0.056, 0.033);
   vec3 pale = vec3(0.300, 0.168, 0.094);
   vec3 albedo = mix(dust, rock, slopeT);
-  albedo = mix(albedo, pale, smoothstep(0.35, 0.75, fbm(vWorld.xz * 0.014)) * 0.35);
+
+  // Measured brightness from HiRISE: sand, bedrock and delta units where they
+  // really are. Hue stays the regolith palette (HiRISE RED is one band).
+  float real = 0.0, rel = 1.0;
+  if (uAlbedoOn > 0.0) {
+    vec2 et = vWorld.xz / uMPPF + uAnchorF + 0.5;              // base-texel edge coords
+    float a = texture(uAlbedo, et / uHeightSizeF).r;
+    real = smoothstep(0.012, 0.024, a);
+    rel = a * (255.0 / 128.0);
+    vec2 nu = (et - uNearRect.xy) / uNearRect.z;
+    vec2 ne = min(nu, 1.0 - nu);
+    float wn = clamp(min(ne.x, ne.y) * 24.0, 0.0, 1.0) * (1.0 - smoothstep(600.0, 900.0, dist));
+    if (wn > 0.0) rel = mix(rel, texture(uAlbedoNear, nu).r * (255.0 / 128.0), wn);
+    real *= uAlbedoOn;
+    // brightness drives the dust/rock mix too: bright = dusty bedrock, dark = basaltic sand
+    albedo = mix(albedo, mix(rock, pale, smoothstep(0.75, 1.35, rel)), real * 0.45);
+    albedo *= mix(1.0, clamp(pow(rel, 1.15), 0.35, 2.2), real);
+  }
+  albedo = mix(albedo, pale, smoothstep(0.35, 0.75, fbm(vWorld.xz * 0.014)) * 0.35 * (1.0 - real));
   // 0.469 is this fbm's mean, which is all a distant pixel can resolve of it
   float fine = nearFx > 0.0 ? mix(0.469, fbm(vWorld.xz * 0.9), nearFx) : 0.469;
-  albedo *= 0.86 + 0.28 * fine;
+  albedo *= 0.86 + 0.28 * fine * (1.0 - 0.5 * real) + 0.07 * real;
 
   vec3 L = normalize(uSunDir);
   float ndl = max(dot(N, L), 0.0);
@@ -385,6 +414,20 @@ void main() {
     vec3 flat_ = mix(vec3(lum), col, 0.35) * vec3(0.84, 0.90, 1.02);
     float hatch = 0.5 + 0.5 * sin((vWorld.x + vWorld.z) * 0.55);
     col = mix(col, flat_ * (0.93 + 0.07 * hatch), synth);
+  }
+
+  // CRISM overlay: orbital spectral indicators painted onto the ground
+  if (uMineralOn > 0.0) {
+    vec2 mt = (vWorld.xz / uMPPF + uAnchorF + 0.5) / 4.0;
+    vec4 m = texture(uMinerals, mt / uMineralSize);
+    // enrichment above this tile's background (thresholds from the bake's
+    // median..95th percentile), so the olivine-rich floor does not paint everything
+    vec3 e = vec3(smoothstep(0.42, 0.58, m.r), smoothstep(0.08, 0.35, m.g), smoothstep(0.16, 0.42, m.b));
+    vec3 tint = (e.r * vec3(0.10, 0.85, 0.25) + e.g * vec3(1.0, 0.80, 0.10) + e.b * vec3(0.25, 0.55, 1.0))
+              / max(e.r + e.g + e.b, 1e-3);
+    float k = clamp(max(max(e.r, e.g), e.b), 0.0, 1.0) * step(0.5, m.a) * uMineralOn;
+    float lum = dot(col, vec3(0.2126, 0.7152, 0.0722));
+    col = mix(col, (0.35 + 1.6 * lum) * tint * 1.4, k * 0.75);
   }
 
   float fog  = 1.0 - exp(-pow(dist * uFogDensity, 2.0));
@@ -461,6 +504,14 @@ export class Terrain {
         uAnchorF: { value: new THREE.Vector2(heightfield.anchorCol, heightfield.anchorRow) },
         uMPPF: { value: heightfield.mpp },
         uMaskStrength: { value: 1.0 },
+        uAlbedo: { value: null },
+        uHeightSizeF: { value: new THREE.Vector2(heightfield.width, heightfield.height) },
+        uAlbedoOn: { value: 0 },
+        uAlbedoNear: { value: null },
+        uNearRect: { value: new THREE.Vector4(0, 0, 1, 0) },
+        uMinerals: { value: null },
+        uMineralSize: { value: new THREE.Vector2(1, 1) },
+        uMineralOn: { value: 0 },
         uRTSteps: { value: 40 },
         uRTSoftness: { value: 14.0 },
         uRTMaxDist: { value: 2600.0 },

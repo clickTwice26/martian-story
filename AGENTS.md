@@ -46,6 +46,7 @@ cd server && go build -o jezero-server .
   - `settings.js` & `settingsui.js`: Declarative schema-driven settings UI with `localStorage` persistence.
   - `marstime.js`: Mars24 clock and sun position calculations.
   - `detail.js`: Bit-exact procedural detail (slope-driven surface rocks and ripples).
+  - `realdata.js`: Optional free NASA/USGS layers: HiRISE albedo, CTX/MOLA far terrain and stereo-gap fill, CRISM minerals, MEDA weather, rover photo / RIMFAX links. Each degrades gracefully if its file is missing.
 - **`data/`**: Scientific data and heightmaps:
   - `jezero_base.png` & `jezero_detail.png`: 16-bit elevation rasters.
   - `m20_traverse.json` & `m20_waypoints.json`: Actual NASA Perseverance rover drive data.

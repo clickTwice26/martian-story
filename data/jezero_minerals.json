@@ -1,0 +1,42 @@
+{
+  "name": "jezero_minerals",
+  "width": 2048,
+  "height": 1024,
+  "metresPerPixel": 8.0,
+  "covers": "jezero_base",
+  "channels": {
+    "r": "olivine indicator: OLINDEX3 / 0.30",
+    "g": "Mg-carbonate indicator: min(D2300/0.04, BD2500_2/0.02)",
+    "b": "hydrated-mineral indicator (sulfate / bound water): max(SINDEX2/0.06, BD1900_2/0.04)",
+    "a": "255 = covered by at least one CRISM observation"
+  },
+  "caveat": "Spectral summary parameters are indicators, not mineral identifications (Viviano-Beck et al. 2014).",
+  "coverage": 0.7416725158691406,
+  "stats": {
+    "olivine": {
+      "p50": 0.3976439833641052,
+      "p95": 0.516597330570221,
+      "p99": 0.581171989440918
+    },
+    "carbonate": {
+      "p50": 0.0,
+      "p95": 0.27049949765205383,
+      "p99": 0.5076040029525757
+    },
+    "hydrated": {
+      "p50": 0.12012650817632675,
+      "p95": 0.3834807574748993,
+      "p99": 0.49436676502227783
+    }
+  },
+  "observations": [
+    "hrl000040ff_07",
+    "frt000047a3_07",
+    "frt00005850_07",
+    "frt00005c5e_07",
+    "frt000066a4_07",
+    "frt0001fb74_07"
+  ],
+  "source": "MRO CRISM MTRDR browse products (MRO-M-CRISM-5-RDR-MPTARGETED-V1.0), PDS Geosciences Node",
+  "sourceUrl": "https://pds-geosciences.wustl.edu/missions/mro/crism.htm"
+}

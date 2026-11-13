@@ -22,7 +22,12 @@ This matters more than any feature list, so it goes first.
 | **Mars clock** | Real. Allison & McEwen (2000), the Mars24 algorithm. Landing → mission sol 0 exactly; today → sol 1985 against NASA data ending at 1980. |
 | **Sun position** | Real. Derived from Ls, solar declination and local true solar time at 18.44°N, 77.45°E. |
 | **Shadows** | Real rays, traced against the real elevation data. |
-| **9.31% of the main tile** | **Interpolated, not measured.** The rectangular window overruns the union of the stereo footprints. Marked by a validity mask and rendered desaturated — press **M** to toggle. |
+| **9.31% of the main tile** | **Coarser measurement.** The rectangular window overruns the union of the HiRISE stereo footprints. Those texels now take the JPL CTX stereo elevation (20 m) instead of a nearest-value smear, still marked by the validity mask and rendered desaturated — press **M** to toggle. |
+| **Ground brightness** | Real. USGS Mars 2020 TRN HiRISE orthomosaic (25 cm), resampled to 2 m (0.5 m around the landing site), with the photo's slope shading regressed out against the DTM so the game's own sun does the lighting. Hue is still the regolith palette: HiRISE RED is a single band. |
+| **Horizon** | Real. The rest of Jezero and its rim from the JPL/USGS CTX DEM of the crater (20 m), MOLA (463 m) to the west, coloured from the CTX orthomosaic. |
+| **Minerals** | Real indicators. MRO CRISM summary parameters (olivine, Mg carbonate, hydrated minerals) from six targeted observations, 18 m/px. Press **K**. Indicators, not identifications. |
+| **Weather** | Real. Perseverance MEDA pressure, air and ground temperature and wind, sampled every 9th sol and reduced to hourly means per 10° of Ls. Drives the HUD, the survival temperature and the wind sound. |
+| **Photos and radar** | Real. Press **P** for the Mastcam-Z and Navcam frames taken at the nearest waypoint and the RIMFAX radargram if the rover sounded the spot you stand on. Loaded live from mars.nasa.gov and PDS; only links are stored. |
 | **Sub-metre surface** | **Synthesised.** A 2 m/px DTM cannot hold ripples or rocks (Nyquist), so that band is generated — but *driven by* the measured slope, not invented freely. See [Surface detail](#surface-detail). |
 
 ## Quick start
@@ -408,7 +413,12 @@ src/
     models.js           procedural hab, berm, solar array, O2 plant, oven, greenhouse, reactor, pod
 reports/, research_notes/  the NASA survival research the campaign is built on
 data/                   baked NASA tiles + rover traverse
-tools/                  the range-request extractors, and make_figures.py
+tools/                  the range-request extractors, and make_figures.py:
+    extract_ortho.py    HiRISE orthomosaic -> jezero_albedo*.jpg (shading regressed out)
+    extract_horizon.py  JPL CTX DEM + MOLA + CTX ortho -> jezero_far.*
+    extract_crism.py    CRISM MTRDR browse parameters -> jezero_minerals.png
+    build_meda.py       MEDA weather station -> meda_climate.json (slow: ~1 h)
+    index_media.py      rover photo + RIMFAX radargram links -> m20_media.json
 docs/figures/           reference figures for the data and algorithms (light / dark)
 server/                 Go static server (range requests, gzip, correct MIME)
 vendor/                 three.js r160 + rigged models, all local
