@@ -699,6 +699,7 @@ export class Survival {
     const s = this._station;
     if (!s) return false;
     s.use(this);
+    this.actions?.interact?.();
     return true;
   }
 

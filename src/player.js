@@ -42,6 +42,8 @@ export const SETTINGS = {
        which reads as a giant. 6.0 m puts it near 28%, the usual third-person
        framing. The model was always the right size; the camera was not. */
     camDistance: 6.0,
+    shoulderOffset: 0.72,
+    crosshair3rd: 'Always On',
     fov: 62,
   },
   move: {

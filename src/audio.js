@@ -20,10 +20,39 @@ export class SuitAudio {
     this.ready = false;
     this.enabled = true;
     this.masterVolume = 0.85;
+    this.breathGain = 1;
+    this.fanScale = 0;            // suit ventilation fan scale (0 = disabled)
+    this.windScale = 0;           // Mars exterior ambient sound scale (0 = disabled)
+    this.commsScale = 0;          // comms bed hiss scale (0 = disabled)
+    this.stepScale = 1;           // footstep scale
     this.exertion = 0;            // 0..1, drives breath rate and depth
     this._breathT = 0;
     this._breathPhase = 0;        // 0 = inhale next, 1 = exhale next
     this._nextBreath = 0;
+  }
+
+  setWindScale(v) {
+    this.windScale = Math.max(0, v);
+    if (this.windGain) this.windGain.gain.value = 0.05 * this.windScale;
+    if (this.windLfoGain) this.windLfoGain.gain.value = 0.028 * this.windScale;
+  }
+
+  setFanScale(v) {
+    this.fanScale = Math.max(0, v);
+    if (this.fanGain) this.fanGain.gain.value = (0.085 + this.exertion * 0.05) * this.fanScale;
+  }
+
+  setCommsScale(v) {
+    this.commsScale = Math.max(0, v);
+    if (this.commsGain) this.commsGain.gain.value = 0.012 * this.commsScale;
+  }
+
+  setBreathGain(v) {
+    this.breathGain = Math.max(0, v);
+  }
+
+  setStepScale(v) {
+    this.stepScale = Math.max(0, v);
   }
 
   async start() {
@@ -79,7 +108,7 @@ export class SuitAudio {
   /** Ventilation fan + regulator: the constant bed you stop noticing. */
   _buildSuitFan() {
     const ctx = this.ctx;
-    const g = ctx.createGain(); g.gain.value = 0.085;
+    const g = ctx.createGain(); g.gain.value = 0.085 * this.fanScale;
 
     // two slightly detuned rotors
     for (const [f, amp] of [[61, 0.55], [92.5, 0.3], [123, 0.14]]) {
@@ -116,14 +145,15 @@ export class SuitAudio {
     const src = this._loopNoise();
     const lp = ctx.createBiquadFilter();
     lp.type = 'lowpass'; lp.frequency.value = 135; lp.Q.value = 0.4;
-    const g = ctx.createGain(); g.gain.value = 0.05;
+    const g = ctx.createGain(); g.gain.value = 0.05 * this.windScale;
     src.connect(lp).connect(g).connect(this.master);
 
     // gusts
     const lfo = ctx.createOscillator(); lfo.frequency.value = 0.045;
-    const lg = ctx.createGain(); lg.gain.value = 0.028;
+    const lg = ctx.createGain(); lg.gain.value = 0.028 * this.windScale;
     lfo.connect(lg).connect(g.gain); lfo.start();
     this.windGain = g;
+    this.windLfoGain = lg;
   }
 
   /** Open-channel radio hiss, very low. */
@@ -132,12 +162,14 @@ export class SuitAudio {
     const src = this._loopNoise();
     const hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 1400;
     const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 3200;
-    const g = ctx.createGain(); g.gain.value = 0.012;
+    const g = ctx.createGain(); g.gain.value = 0.012 * this.commsScale;
     src.connect(hp).connect(lp).connect(g).connect(this.master);
+    this.commsGain = g;
   }
 
   // ------------------------------------------------------------- breathing
   _breath(inhale) {
+    if (this.breathGain <= 0) return;
     const ctx = this.ctx, t = ctx.currentTime;
     const ex = this.exertion;
     const src = this._loopNoise();
@@ -147,7 +179,7 @@ export class SuitAudio {
     bp.Q.value = inhale ? 1.15 : 0.9;
 
     const g = ctx.createGain();
-    const peak = (inhale ? 0.20 : 0.155) * (0.72 + ex * 0.75);
+    const peak = (inhale ? 0.20 : 0.155) * (0.72 + ex * 0.75) * this.breathGain;
     const dur = inhale ? (0.62 - ex * 0.24) : (0.78 - ex * 0.30);
 
     g.gain.setValueAtTime(0.0001, t);
@@ -170,9 +202,9 @@ export class SuitAudio {
    * heavily damped regolith component on top.
    */
   footstep(intensity = 1, slope = 0) {
-    if (!this.ready || !this.enabled) return;
+    if (!this.ready || !this.enabled || this.stepScale <= 0) return;
     const ctx = this.ctx, t = ctx.currentTime;
-    const amp = Math.min(1.4, Math.max(0.15, intensity));
+    const amp = Math.min(1.4, Math.max(0.15, intensity)) * this.stepScale;
 
     // thud conducted up the leg
     const o = ctx.createOscillator();
@@ -290,7 +322,7 @@ export class SuitAudio {
     if (!this.ready || !this.enabled) return;
     this.exertion += (exertion - this.exertion) * Math.min(1, dt * 1.4);
     const t = this.ctx.currentTime;
-    if (t >= this._nextBreath) {
+    if (this.breathGain > 0 && t >= this._nextBreath) {
       const inhale = this._breathPhase === 0;
       this._breath(inhale);
       this._breathPhase ^= 1;
@@ -298,7 +330,7 @@ export class SuitAudio {
       const cycle = 4.6 - this.exertion * 2.9;
       this._nextBreath = t + (inhale ? cycle * 0.44 : cycle * 0.56);
     }
-    if (this.fanGain) this.fanGain.gain.value = 0.085 + this.exertion * 0.05;
+    if (this.fanGain) this.fanGain.gain.value = (0.085 + this.exertion * 0.05) * this.fanScale;
   }
 
   setEnabled(on) {

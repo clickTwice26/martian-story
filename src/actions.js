@@ -43,6 +43,15 @@ function toBody(body, w, out) {
   return out.set(-(dx * c - dz * s), w.y - body.pos.y, dx * s + dz * c);
 }
 
+/** Convert camera local coords (cx: right, cy: up, cz: fwd) to body coords (feet origin, +z fwd, +x right) */
+function camToBody(body, cx, cy, cz, out) {
+  const pitch = body?.pitch || 0;
+  const cosP = Math.cos(pitch), sinP = Math.sin(pitch);
+  const dy = cy * cosP + cz * sinP;
+  const dz = -cy * sinP + cz * cosP;
+  return out.set(cx, 1.62 + dy, Math.max(0.18, 0.06 + dz));
+}
+
 const _v = new THREE.Vector3(), _w = new THREE.Vector3(), _u = new THREE.Vector3();
 const _q = new THREE.Quaternion(), _up = new THREE.Vector3(0, 1, 0);
 
@@ -96,6 +105,13 @@ export class CharacterActions {
   }
 
   setDefend(on) { this._defendHeld = !!on; }
+
+  /** Generic two-handed interaction gesture (e.g. stations, valves, switches) */
+  interact() {
+    if (this.state === 'carry' || this.state === 'reach' || this.state === 'lift') return false;
+    this._go('interact');
+    return true;
+  }
 
   /** Pick up what is in reach, or put down what is held. */
   grab() {
@@ -151,6 +167,7 @@ export class CharacterActions {
       case 'lower': if (this.t >= 0.55) this._finishLower(); break;
       case 'release': if (this.t >= 0.35) { this.target = null; this._go('idle'); } break;
       case 'throw': this._updateThrow(); break;
+      case 'interact': if (this.t >= 0.85) this._go('idle'); break;
     }
 
     if (this.state !== 'reach') this.stepTo = null;
@@ -273,6 +290,13 @@ export class CharacterActions {
   _carryPoint(out) {
     const p = this.held || this.target, D = this.dims;
     const heavy = Math.min(1, p.mass / LIFT_MAX);
+    const isFPP = !!this.body?.isFirstPerson;
+    if (isFPP) {
+      // In FPP, keep carried item framed in view in front of the camera
+      const camY = -0.22 - heavy * 0.04;
+      const camZ = 0.44 + p.radius * 0.35;
+      return camToBody(this.body, 0, camY, camZ, out);
+    }
     return out.set(0, D.shoulderY - 0.36 - heavy * 0.18, 0.26 + p.radius);
   }
 
@@ -324,9 +348,16 @@ export class CharacterActions {
     P.crouch = 0; P.bend = 0; P.twist = 0;
     P.right.w = 0; P.left.w = 0;
 
+    const isFPP = !!this.body?.isFirstPerson;
+
     const setHand = (side, x, y, z, px, py, pz, w) => {
       const h = P[side];
       h.pos.set(x, y, z); h.pole.set(px, py, pz); h.w = w;
+    };
+    const setCamHand = (side, cx, cy, cz, px, py, pz, w) => {
+      camToBody(this.body, cx, cy, cz, _v);
+      camToBody(this.body, px, py, pz, _w);
+      setHand(side, _v.x, _v.y, _v.z, _w.x, _w.y, _w.z, w);
     };
     const guardHand = (side, w, lift = 0) => {
       const sx = side === 'right' ? 1 : -1;
@@ -334,14 +365,24 @@ export class CharacterActions {
               sx * (D.shoulderX + 0.55), S - 0.75, -0.15, w);
     };
 
+    // Forward tilt when looking down in FPP to naturally frame actions
+    if (isFPP && (this.body?.pitch || 0) < 0) {
+      P.bend = Math.max(P.bend, -this.body.pitch * 0.35);
+    }
+
     // ---- block: forearms up in front of the visor ----
     if (this.guard > 1e-3) {
-      for (const side of ['right', 'left']) {
-        const sx = side === 'right' ? 1 : -1;
-        setHand(side, sx * 0.09, S + 0.24, 0.24, sx * 0.30, S - 0.45, 0.65, this.guard);
+      if (isFPP) {
+        setCamHand('left', -0.11, -0.12, 0.36, -0.35, -0.42, 0.15, this.guard);
+        setCamHand('right', 0.11, -0.12, 0.36, 0.35, -0.42, 0.15, this.guard);
+      } else {
+        for (const side of ['right', 'left']) {
+          const sx = side === 'right' ? 1 : -1;
+          setHand(side, sx * 0.09, S + 0.24, 0.24, sx * 0.30, S - 0.45, 0.65, this.guard);
+        }
       }
       P.crouch = 0.06 * this.guard;
-      P.bend = 0.10 * this.guard;
+      P.bend = Math.max(P.bend, 0.10 * this.guard);
     }
 
     switch (this.state) {
@@ -351,37 +392,95 @@ export class CharacterActions {
         const inW = smooth(t / 0.08), outW = 1 - smooth((t - 0.30) / 0.12);
         const ext = t < 0.10 ? 0 : t < 0.20 ? easeOut((t - 0.10) / 0.10) : 1 - smooth((t - 0.25) / 0.17);
         const w = Math.max(inW * outW, this.guard);
-        // guard position -> full extension at shoulder height, fist turned in
-        const gx = sx * 0.13, gy = S + 0.04, gz = 0.28;
-        const ex = sx * 0.03, ey = S - 0.02, ez = L * 0.98;
-        setHand(side, lerp(gx, ex, ext), lerp(gy, ey, ext), lerp(gz, ez, ext),
-                sx * (D.shoulderX + 0.7), S - 0.55, lerp(-0.15, 0.1, ext), w);
-        // off hand stays up to cover the face
-        if (this.guard < 0.5) guardHand(other, Math.max(w, this.guard));
-        // the torso turns into it - that is where a punch's power comes from
+        if (isFPP) {
+          const gx = sx * 0.16, gy = -0.22, gz = 0.36;
+          const ex = sx * 0.04, ey = -0.06, ez = 0.58;
+          setCamHand(side, lerp(gx, ex, ext), lerp(gy, ey, ext), lerp(gz, ez, ext),
+                     sx * 0.45, -0.42, 0.15, w);
+          if (this.guard < 0.5) {
+            setCamHand(other, -sx * 0.16, -0.20, 0.36, -sx * 0.45, -0.42, 0.15, Math.max(w * 0.8, this.guard));
+          }
+        } else {
+          const gx = sx * 0.13, gy = S + 0.04, gz = 0.28;
+          const ex = sx * 0.03, ey = S - 0.02, ez = L * 0.98;
+          setHand(side, lerp(gx, ex, ext), lerp(gy, ey, ext), lerp(gz, ez, ext),
+                  sx * (D.shoulderX + 0.7), S - 0.55, lerp(-0.15, 0.1, ext), w);
+          if (this.guard < 0.5) guardHand(other, Math.max(w, this.guard));
+        }
         P.twist = -sx * 0.38 * ext * w;
         P.bend = Math.max(P.bend, 0.06 * ext);
         break;
       }
       case 'throw':
         if (!this.held) {
-          // follow-through: both arms out after the release, then relax
           const w = 1 - smooth((this.t - 0.22) / 0.23);
-          for (const side of ['right', 'left']) {
-            const sx = side === 'right' ? 1 : -1;
-            setHand(side, sx * 0.16, S + 0.05, L * 0.95, sx * 0.7, S - 0.5, 0, w);
+          if (isFPP) {
+            setCamHand('left', -0.16, -0.10, 0.52, -0.42, -0.40, 0.15, w);
+            setCamHand('right', 0.16, -0.10, 0.52, 0.42, -0.40, 0.15, w);
+          } else {
+            for (const side of ['right', 'left']) {
+              const sx = side === 'right' ? 1 : -1;
+              setHand(side, sx * 0.16, S + 0.05, L * 0.95, sx * 0.7, S - 0.5, 0, w);
+            }
           }
           break;
         }
-        this._grabPose(P, setHand);
+        this._grabPose(P, setHand, isFPP);
         break;
+      case 'interact': {
+        const t = this.t;
+        const inW = smooth(t / 0.15), outW = 1 - smooth((t - 0.65) / 0.20);
+        const w = inW * outW;
+        const reach = Math.sin(t / 0.85 * Math.PI);
+        if (isFPP) {
+          const bob = Math.sin(t * 10) * 0.015;
+          setCamHand('left', -0.16, -0.20 + reach * 0.06 + bob * 0.5, 0.42 + reach * 0.06,
+                     -0.42, -0.45, 0.12, w);
+          setCamHand('right', 0.15, -0.16 + reach * 0.08 + bob, 0.44 + reach * 0.10,
+                     0.42, -0.45, 0.12, w);
+          P.bend = Math.max(P.bend, 0.08 * reach);
+        } else {
+          const bob = Math.sin(t * 8) * 0.015;
+          setHand('left', -0.16, S - 0.15 - 0.04 + bob, 0.50 + reach * 0.12, -0.45, S - 0.35, 0.15, w);
+          setHand('right', 0.16, S - 0.15 + bob, 0.53 + reach * 0.12, 0.45, S - 0.35, 0.15, w);
+          P.bend = Math.max(P.bend, 0.22 * reach);
+        }
+        break;
+      }
       case 'reach': case 'strain': case 'lift': case 'lower': case 'release': case 'carry':
-        this._grabPose(P, setHand);
+        this._grabPose(P, setHand, isFPP);
         break;
+    }
+
+    // Operating survival stations / ongoing jobs (purifier, solar, hab inflate...)
+    if (this.body?.operating && this.state === 'idle') {
+      const t = this.t;
+      const w = 1.0;
+      if (isFPP) {
+        const workBob = Math.sin(t * 6) * 0.018;
+        const workReach = Math.cos(t * 4.5) * 0.022;
+        setCamHand('left', -0.17, -0.18 + workBob * 0.3, 0.44,
+                   -0.42, -0.45, 0.12, w);
+        setCamHand('right', 0.15 + workBob * 0.4, -0.14 + workBob, 0.46 + workReach,
+                   0.42, -0.45, 0.12, w);
+        P.bend = Math.max(P.bend, 0.06);
+      } else {
+        const workBob = Math.sin(t * 6) * 0.02;
+        const workReach = Math.cos(t * 4.5) * 0.025;
+        setHand('left', -0.18, S - 0.10 - 0.05, 0.44, -0.45, S - 0.38, 0.20, w);
+        setHand('right', 0.15 + workBob * 0.5, S - 0.10 + workBob, 0.46 + workReach, 0.45, S - 0.38, 0.20, w);
+        P.bend = Math.max(P.bend, 0.20);
+      }
+    } else if (isFPP && this.body?.candidateNear && this.state === 'idle' && this.guard < 0.1) {
+      // Subtle reaching / ready hands at the bottom of the screen when facing an interactable
+      const w = 0.55;
+      const bob = Math.sin(this.t * 3) * 0.006;
+      setCamHand('left', -0.22, -0.26 + bob, 0.40, -0.42, -0.48, 0.12, w);
+      setCamHand('right', 0.22, -0.25 + bob, 0.41, 0.42, -0.48, 0.12, w);
     }
   }
 
-  _grabPose(P, setHand) {
+  _grabPose(P, setHand, isFPP = false) {
     const it = this.held || this.target;
     if (!it) return;
     toBody(this.body, it.position, this._itemBody);
@@ -416,8 +515,14 @@ export class CharacterActions {
     const grip = r + 0.035;
     for (const side of ['right', 'left']) {
       const sx = side === 'right' ? 1 : -1;
-      setHand(side, c.x + sx * grip, gripY, c.z - r * 0.15,
-              c.x + sx * 0.75, c.y + 0.5, c.z - 0.45, w);
+      if (isFPP && (this.state === 'carry' || this.state === 'lift')) {
+        // High visibility grip on carried item in FPP
+        setHand(side, c.x + sx * grip, gripY + 0.02, c.z - r * 0.10,
+                c.x + sx * 0.50, c.y - 0.38, c.z - 0.15, w);
+      } else {
+        setHand(side, c.x + sx * grip, gripY, c.z - r * 0.15,
+                c.x + sx * 0.75, c.y + 0.5, c.z - 0.45, w);
+      }
     }
   }
 

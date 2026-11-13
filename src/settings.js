@@ -166,9 +166,21 @@ export const SCHEMA = {
       hint: 'A companion that follows you and calls out real rover waypoints, unmeasured ground and slope hazards.',
       apply: (v, c) => { if (c.companion) { c.companion.root.visible = v; if (!v) c.companion.marker.visible = false; } },
     },
+    companionType: {
+      label: 'Support Unit Model', type: 'select',
+      options: ['Ingenuity Mars Helicopter (NASA)', 'K-7 Android Unit'],
+      def: 'Ingenuity Mars Helicopter (NASA)',
+      hint: 'Select the authentic NASA Mars 2020 Ingenuity coaxial aerial scout or the K-7 ground android unit.',
+      apply: (v, c) => { if (c.companion) c.companion.setType(v); },
+    },
     companionChatter: {
       label: 'Support Unit Commentary', type: 'toggle', def: true,
       apply: () => {},
+    },
+    perseveranceRover: {
+      label: 'NASA Perseverance Rover', type: 'toggle', def: true,
+      hint: 'Display the authentic 3D NASA Perseverance Rover (Mars 2020) at its real Jezero Crater traverse location.',
+      apply: (v, c) => { if (c.perseverance) c.perseverance.root.visible = v; },
     },
     roverTrack: {
       label: 'Show Rover Traverse', type: 'toggle', def: true,
@@ -185,6 +197,17 @@ export const SCHEMA = {
       label: 'Third-Person Distance', type: 'slider', min: 2.5, max: 12, step: 0.1, def: 6.0,
       hint: 'At 3.4 m a 1.85 m astronaut fills half the frame and reads as oversized. 6 m puts him near 28%.',
       apply: (v, c) => { c.settings.view.camDistance = v; },
+    },
+    shoulderOffset: {
+      label: 'Shoulder Framing (3rd Person)', type: 'slider', min: 0.3, max: 1.3, step: 0.05, def: 0.72,
+      hint: 'Over-the-shoulder offset in 3rd person. Keeps the astronaut framed to the left, clear of the crosshair.',
+      apply: (v, c) => { c.settings.view.shoulderOffset = v; },
+    },
+    crosshair3rd: {
+      label: '3rd-Person Crosshair', type: 'select',
+      options: ['Always On', 'Contextual (Interact Only)', 'Hidden'], def: 'Always On',
+      hint: 'Crosshair visibility in 3rd person. (Visor crosshair is always active in 1st person).',
+      apply: (v, c) => { c.settings.view.crosshair3rd = v; },
     },
     headBob: { label: 'Head Bob', type: 'toggle', def: true,
       apply: (v, c) => { c.settings.view.bobEnabled = v; } },
@@ -219,14 +242,14 @@ export const SCHEMA = {
     master: { label: 'Master Volume', type: 'slider', min: 0, max: 1, step: 0.02, def: 0.85,
       apply: (v, c) => { c.audio.masterVolume = v; if (c.audio.master) c.audio.master.gain.value = c.audio.enabled ? v : 0; } },
     breathing: { label: 'Breathing', type: 'slider', min: 0, max: 2, step: 0.05, def: 1,
-      apply: (v, c) => { c.audio.breathGain = v; } },
-    suitFan: { label: 'Suit Ventilation', type: 'slider', min: 0, max: 2, step: 0.05, def: 1,
-      apply: (v, c) => { c.audio.fanScale = v; if (c.audio.fanGain) c.audio.fanGain.gain.value = 0.085 * v; } },
-    wind: { label: 'Exterior Wind', type: 'slider', min: 0, max: 3, step: 0.05, def: 1,
-      hint: 'Mars is near-silent outside: 610 Pa of CO2 crushes everything above ~240 Hz.',
-      apply: (v, c) => { if (c.audio.windGain) c.audio.windGain.gain.value = 0.05 * v; } },
+      apply: (v, c) => { if (c.audio.setBreathGain) c.audio.setBreathGain(v); else c.audio.breathGain = v; } },
+    suitFan: { label: 'Suit Ventilation', type: 'slider', min: 0, max: 2, step: 0.05, def: 0,
+      apply: (v, c) => { if (c.audio.setFanScale) c.audio.setFanScale(v); else { c.audio.fanScale = v; if (c.audio.fanGain) c.audio.fanGain.gain.value = 0.085 * v; } } },
+    wind: { label: 'Mars Ambient Wind', type: 'slider', min: 0, max: 3, step: 0.05, def: 0,
+      hint: 'Mars exterior ambient sound: low-passed atmospheric rumble and gusts.',
+      apply: (v, c) => { if (c.audio.setWindScale) c.audio.setWindScale(v); else if (c.audio.windGain) c.audio.windGain.gain.value = 0.05 * v; } },
     footsteps: { label: 'Footsteps', type: 'slider', min: 0, max: 2, step: 0.05, def: 1,
-      apply: (v, c) => { c.audio.stepScale = v; } },
+      apply: (v, c) => { if (c.audio.setStepScale) c.audio.setStepScale(v); else c.audio.stepScale = v; } },
   },
 };
 
@@ -305,6 +328,8 @@ export class Settings {
       this.fromStore = true;            // a returning player: never second-guess their choices
       const saved = JSON.parse(raw);
       for (const k of Object.keys(this.values)) if (k in saved) this.values[k] = saved[k];
+      this.values.wind = 0;
+      this.values.suitFan = 0;
     } catch (e) { /* ignore corrupt state */ }
   }
 }

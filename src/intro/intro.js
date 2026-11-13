@@ -497,6 +497,7 @@ export class Intro {
       this._bedLevels = { fan: a.fanGain?.gain.value, wind: a.windGain?.gain.value };
       if (a.fanGain) a.fanGain.gain.value = 0;
       if (a.windGain) a.windGain.gain.value = 0;
+      if (a.windLfoGain) a.windLfoGain.gain.value = 0;
     }
     this._onKey = e => {
       if (!this.active) return;
@@ -1062,9 +1063,11 @@ export class Intro {
     this.ui.cineSkip.removeEventListener('click', this._onSkipClick);
     if (this.score && !this.score.stopped) this.score.stop(skipped ? 0.6 : 2.5);
     const a = this.w.audio;
-    if (a && this._bedLevels) {
-      if (a.fanGain && this._bedLevels.fan != null) a.fanGain.gain.setTargetAtTime(this._bedLevels.fan, a.ctx.currentTime, 1.5);
-      if (a.windGain && this._bedLevels.wind != null) a.windGain.gain.setTargetAtTime(this._bedLevels.wind, a.ctx.currentTime, 2.5);
+    if (a) {
+      if (a.setFanScale) a.setFanScale(a.fanScale ?? 0);
+      else if (a.fanGain && this._bedLevels?.fan != null) a.fanGain.gain.setTargetAtTime(this._bedLevels.fan, a.ctx.currentTime, 1.5);
+      if (a.setWindScale) a.setWindScale(a.windScale ?? 0);
+      else if (a.windGain && this._bedLevels?.wind != null) a.windGain.gain.setTargetAtTime(this._bedLevels.wind, a.ctx.currentTime, 2.5);
     }
     // the world as the crash left it, however the film ended
     this.ship.root.visible = false;

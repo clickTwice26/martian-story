@@ -64,9 +64,13 @@ export class Astronaut {
     // ---- suit hardware, parented to real bones ----
     this.bones = {
       head: findBone(this.model, 'mixamorigHead', 'head'),
+      neck: findBone(this.model, 'mixamorigNeck', 'neck'),
       spine: findBone(this.model, 'mixamorigSpine2', 'mixamorigSpine1', 'spine2', 'spine'),
       hips: findBone(this.model, 'mixamorigHips', 'hips'),
     };
+    this.model.traverse(o => {
+      if (o.name && o.name.toLowerCase().includes('visor')) this.visorMesh = o;
+    });
     this._buildSuitHardware();
 
     // Procedural pose layer for punch / block / pick-up, measured off this rig.
@@ -153,6 +157,17 @@ export class Astronaut {
   }
 
   setVisible(v) { if (this._visible !== v) { this._visible = v; this.root.visible = v; } }
+
+  setFirstPerson(isFPP) {
+    if (this._isFPP === isFPP) return;
+    this._isFPP = isFPP;
+    if (this.helmetGroup) this.helmetGroup.visible = !isFPP;
+    if (this.plssGroup) this.plssGroup.visible = !isFPP;
+    if (this.visorMesh) this.visorMesh.visible = !isFPP;
+    const targetScale = isFPP ? 0.001 : 1;
+    if (this.bones.neck) this.bones.neck.scale.setScalar(targetScale);
+    else if (this.bones.head) this.bones.head.scale.setScalar(targetScale);
+  }
 
   /**
    * @param gaitPhase radians; advances with DISTANCE walked, not time

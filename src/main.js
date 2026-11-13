@@ -8,6 +8,7 @@ import { SuitAudio } from './audio.js';
 import { Settings } from './settings.js';
 import { Input } from './input.js';
 import { Companion } from './companion.js';
+import { PerseveranceRover } from './perseverance.js';
 import { RockField } from './detail.js';
 import { LightCache } from './lightcache.js';
 import { buildSettingsUI, keyName } from './settingsui.js';
@@ -135,6 +136,7 @@ scene.add(new THREE.HemisphereLight(0xc79a6d, 0x4a2e20, 0.62 * Math.PI));
 
 const audio = new SuitAudio();
 let hf, terrain, lightCache, player, projector, waypoints, mask, astronaut, blobShadow, companion, rocks;
+let perseverance = null, perseveranceModalOpen = false;
 let props, interactables, actions, grabMarker;
 let wreck = null, intro = null, crash = null;
 let survival = null, survivalModal = false;
@@ -250,6 +252,16 @@ async function boot() {
   scene.add(companion.root);
   scene.add(companion.marker);     // the beacon it plants at whatever it wants to show you
 
+  status('Deploying NASA Perseverance Rover…');
+  try {
+    perseverance = await PerseveranceRover.load(hf, waypoints, projector);
+    scene.add(perseverance.root);
+    perseverance.root.visible = !!settings.get('perseveranceRover');
+    window.__perseverance = perseverance;
+  } catch (err) {
+    console.warn('[perseverance] failed to load NASA Perseverance Rover:', err);
+  }
+
   player = new Player(hf);
   player.placeAt(SPAWN.x, SPAWN.z);
   _body.pos = player.pos; _body.vel = player.vel;
@@ -287,7 +299,7 @@ async function boot() {
   bar(1);
   // ---- settings: bind to the live engine, then apply everything at once ----
   settings.bind({
-    renderer, terrain, lightCache, sky, audio, camera, companion, hf, rocks,
+    renderer, terrain, lightCache, sky, audio, camera, companion, perseverance, hf, rocks,
     res, applyPixelRatio,
     curvature: uCurvatureC,
     settings: SETTINGS,
@@ -351,9 +363,16 @@ async function boot() {
   companion.marker.visible = markerWasVisible;
   grabMarker.visible = false;
   settingsUI = buildSettingsUI(settings, el('settings'), closeSettings, input);
-  viewMode = settings.get('viewMode') === 'First Person' ? 'first' : 'third';
+  function syncViewMode(mode) {
+    viewMode = mode === 'First Person' ? 'first' : 'third';
+    document.body.classList.toggle('view-third', viewMode === 'third');
+    document.body.classList.toggle('view-first', viewMode === 'first');
+  }
+  syncViewMode(settings.get('viewMode'));
   settings.listeners.push((k, v) => {
-    if (k === 'viewMode') viewMode = v === 'First Person' ? 'first' : 'third';
+    if (k === 'viewMode') syncViewMode(v);
+    if (k === 'companionType' && companion) companion.setType(v);
+    if (k === 'perseveranceRover' && perseverance) perseverance.root.visible = !!v;
   });
 
   // Bind input to the real canvas and surface its state to the player.
@@ -362,6 +381,7 @@ async function boot() {
   input.attach(renderer.domElement);
   input.deserialize(settings.get('keybinds'));
   paintInputBadge();
+  el('m20CloseBtn')?.addEventListener('click', () => closePerseveranceModal());
 
   el('startBtn').addEventListener('click', beginPlay);
   renderer.domElement.addEventListener('click', () => {
@@ -380,11 +400,13 @@ async function boot() {
   el('startOverlay').classList.remove('hidden');   // never un-hidden before: the bug
   if (lowPowerGPU) showNotice('Low-power GPU detected — using the Low quality preset. ESC → Settings to change it.', 7000);
   window.__mars = { THREE, scene, camera, renderer, hf, terrain, player, projector, intro, wreck, crash,
-                    waypoints, astronaut, audio, mask, SETTINGS, settings, timeState, input, companion, rocks, lightCache, res,
+                    waypoints, astronaut, audio, mask, SETTINGS, settings, timeState, input, companion, perseverance, rocks, lightCache, res,
                     sky, sunLight, SUN_DIR, actions, props, interactables, survival,
+                    openPerseveranceModal, closePerseveranceModal,
                     setMarsTime: (sol, lmst) => { timeState.sol = sol; timeState.lmst = lmst; },
                     get viewMode() { return viewMode; },
                     get settingsOpen() { return settingsOpen; },
+                    get perseveranceModalOpen() { return perseveranceModalOpen; },
                     openSettings: () => openSettings(), closeSettings: () => closeSettings() };
   requestAnimationFrame(frame);
 }
@@ -451,6 +473,7 @@ function updateActionHUD() {
   // A story station (inflate, refill, rest...) takes E unless a story item is in reach.
   const station = survival && player.mode === 'walk' && actions.state !== 'carry' ? survival.prompt : '';
   const c = player.mode === 'walk' && !station ? actions.candidate : null;
+  const nearRover = perseverance && perseverance.root.visible && perseverance.distanceTo(player.pos) < 6.5;
   if (actions.held && actions.state === 'carry') {
     text = `<b>${key('grab')}</b> put down &nbsp; <b>${key('punch')}</b> throw &nbsp; · ${actions.held.label} ${kg(actions.held.mass)} kg`;
   } else if (station) {
@@ -459,9 +482,33 @@ function updateActionHUD() {
     const heavy = c.mass > LIFT_MAX;
     text = `<b>${key('grab')}</b> ${heavy ? 'try to lift' : 'pick up'} &nbsp; · ${c.label} ~${kg(c.mass)} kg` +
            (heavy ? ' <i>(heavy)</i>' : '') + (survival ? survival.describe(c) : '');
+  } else if (nearRover && player.mode === 'walk') {
+    text = `<b>${key('grab')}</b> Inspect NASA Perseverance Rover`;
   }
   if (pr.innerHTML !== text) pr.innerHTML = text;
   pr.classList.toggle('show', !!text);
+
+  const ch = el('crosshair');
+  if (ch) {
+    const isTargeting = !!(station || c || nearRover);
+    ch.classList.toggle('target-active', isTargeting);
+    if (viewMode === 'first') {
+      ch.style.display = 'block';
+      ch.classList.remove('context-dim');
+    } else {
+      const mode = settings.get('crosshair3rd') || 'Always On';
+      if (mode === 'Hidden') {
+        ch.style.display = 'none';
+      } else if (mode === 'Contextual (Interact Only)') {
+        ch.style.display = 'block';
+        const active = isTargeting || actions.held || actions.state !== 'idle';
+        ch.classList.toggle('context-dim', !active);
+      } else {
+        ch.style.display = 'block';
+        ch.classList.remove('context-dim');
+      }
+    }
+  }
 
   grabMarker.visible = !!c;
   if (c) {
@@ -571,6 +618,40 @@ function closeSettings() {
   input.requestCapture();                  // still inside the click gesture
 }
 
+function openPerseveranceModal() {
+  if (perseveranceModalOpen) return;
+  perseveranceModalOpen = true;
+  input.enabled = false;
+  input.clearKeys();
+  if (document.pointerLockElement) document.exitPointerLock();
+
+  const modal = el('perseveranceModal');
+  if (modal) {
+    if (perseverance && projector) {
+      const [lon, lat] = projector.worldToLonLat(perseverance.pos.x, perseverance.pos.z);
+      const elev = perseverance.pos.y;
+      const d = Math.round(perseverance.distanceTo(player.pos));
+      const distEl = el('m20DistToPlayer');
+      if (distEl) distEl.textContent = `${d} m`;
+      const solEl = el('m20SolDisplay');
+      if (solEl) solEl.textContent = `SOL ${perseverance.sol ?? 15}`;
+      const coordEl = el('m20CoordsDisplay');
+      if (coordEl) coordEl.textContent = `${lat.toFixed(5)}°N, ${lon.toFixed(5)}°E · ${elev.toFixed(1)} m`;
+    }
+    modal.classList.add('open');
+  }
+  audio.beep('mode');
+}
+
+function closePerseveranceModal() {
+  if (!perseveranceModalOpen) return;
+  perseveranceModalOpen = false;
+  input.enabled = true;
+  const modal = el('perseveranceModal');
+  if (modal) modal.classList.remove('open');
+  if (begun) input.requestCapture();
+}
+
 /**
  * Pointer lock MUST be requested synchronously inside the user gesture.
  * The previous version awaited audio.start() first, which spent the gesture
@@ -623,10 +704,17 @@ function gameplayCamera() {
   }
   const pivot = new THREE.Vector3(player.pos.x, player.pos.y + 1.22, player.pos.z);
   const boom = SETTINGS.view.camDistance;
+  const shoulder = SETTINGS.view.shoulderOffset ?? 0.72;
+  const aimDist = 45.0;
   return {
-    pos: new THREE.Vector3(pivot.x - _fwd.x * boom + _right.x * 0.42, pivot.y - _fwd.y * boom + 0.34,
-                           pivot.z - _fwd.z * boom + _right.z * 0.42),
-    target: new THREE.Vector3(pivot.x + _fwd.x * 2.2, pivot.y + _fwd.y * 2.2 + 0.1, pivot.z + _fwd.z * 2.2),
+    pos: new THREE.Vector3(
+      pivot.x - _fwd.x * boom + _right.x * shoulder,
+      pivot.y - _fwd.y * boom + 0.32,
+      pivot.z - _fwd.z * boom + _right.z * shoulder),
+    target: new THREE.Vector3(
+      pivot.x + _fwd.x * aimDist + _right.x * (shoulder * 0.15),
+      pivot.y + _fwd.y * aimDist + 0.32,
+      pivot.z + _fwd.z * aimDist + _right.z * (shoulder * 0.15)),
     fov,
   };
 }
@@ -645,6 +733,13 @@ function introDone(skipped) {
 }
 
 addEventListener('keydown', e => {
+  if (perseveranceModalOpen) {
+    if (e.code === 'Escape' || e.code === 'KeyE') {
+      e.preventDefault();
+      closePerseveranceModal();
+      return;
+    }
+  }
   if (e.code !== 'Escape') return;
   if (intro && intro.active) { e.preventDefault(); intro.skip(); return; }
   if (survivalModal) return;                 // the journal closes itself
@@ -665,8 +760,9 @@ document.addEventListener('pointerlockchange', () => {
   if (locked) {
     hasCaptured = true;
     if (settingsOpen) { settingsOpen = false; input.enabled = true; el('settings').classList.remove('open'); }
+    if (perseveranceModalOpen) { perseveranceModalOpen = false; el('perseveranceModal')?.classList.remove('open'); }
     el('startOverlay').classList.add('hidden');
-  } else if (hasCaptured && !settingsOpen && !input.lockFailed && !survivalModal) {
+  } else if (hasCaptured && !settingsOpen && !input.lockFailed && !survivalModal && !perseveranceModalOpen) {
     openSettings();
   }
   paintInputBadge();
@@ -717,7 +813,17 @@ function pollActions() {
   const punch = input.consume('punch'), grab = input.consume('grab');
   if (player.mode === 'walk' && !(survival && (survival.paused || survival.ending))) {
     if (punch) actions.punch();
-    if (grab && !(survival && survival.interact())) actions.grab();
+    if (grab) {
+      if (actions.held && actions.state === 'carry') {
+        actions.grab();
+      } else if (survival && survival.interact()) {
+        // Handled by survival base module
+      } else if (perseverance && perseverance.root.visible && perseverance.distanceTo(player.pos) < 6.5) {
+        openPerseveranceModal();
+      } else {
+        actions.grab();
+      }
+    }
   }
   if (input.consume('journal') && survival && survival.running) survival.toggleJournal();
   if (input.consume('cycleRT')) {
@@ -795,7 +901,7 @@ function updateCamera(dt) {
   player.forward(_fwd);
   _right.set(Math.cos(player.yaw), 0, -Math.sin(player.yaw));
 
-  if (viewMode === 'first' || player.mode === 'fly') {
+  if (player.mode === 'fly') {
     astronaut.setVisible(false);
     blobShadow.visible = false;
     const eye = player.eye;
@@ -805,26 +911,49 @@ function updateCamera(dt) {
     return;
   }
 
+  if (viewMode === 'first') {
+    astronaut.setFirstPerson(true);
+    astronaut.setVisible(true);
+    blobShadow.visible = true;
+    const eye = player.eye;
+    camera.position.set(
+      eye.x + _right.x * player.bobX + _fwd.x * 0.06,
+      eye.y,
+      eye.z + _right.z * player.bobX + _fwd.z * 0.06);
+    camera.lookAt(camera.position.x + _fwd.x, camera.position.y + _fwd.y, camera.position.z + _fwd.z);
+    camera.rotateZ(player.roll);
+    return;
+  }
+
+  astronaut.setFirstPerson(false);
   astronaut.setVisible(true);
   blobShadow.visible = true;
   _pivot.set(player.pos.x, player.pos.y + 1.22 + player.bobY * 0.5, player.pos.z);
 
-  // March the boom and stop before it would clip the terrain.
   const boom = SETTINGS.view.camDistance;
+  const shoulder = SETTINGS.view.shoulderOffset ?? 0.72;
+  const aimDist = 45.0;
+
+  // March the boom and stop before it would clip the terrain.
   let allowed = boom;
   for (let i = 1; i <= 10; i++) {
     const t = (i / 10) * boom;
-    _probe.set(_pivot.x - _fwd.x * t, _pivot.y - _fwd.y * t + 0.30, _pivot.z - _fwd.z * t);
+    const s = shoulder * (t / boom);
+    _probe.set(_pivot.x - _fwd.x * t + _right.x * s, _pivot.y - _fwd.y * t + 0.32, _pivot.z - _fwd.z * t + _right.z * s);
     if (_probe.y < hf.heightAt(_probe.x, _probe.z) + 0.55) { allowed = (i - 1) / 10 * boom; break; }
   }
   camBoom += (Math.max(0.9, allowed) - camBoom) * Math.min(1, dt * (allowed < camBoom ? 22 : 5));
 
+  const currShoulder = shoulder * Math.min(1, camBoom / 2.5);
   _desired.set(
-    _pivot.x - _fwd.x * camBoom + _right.x * 0.42,
-    _pivot.y - _fwd.y * camBoom + 0.34,
-    _pivot.z - _fwd.z * camBoom + _right.z * 0.42);
+    _pivot.x - _fwd.x * camBoom + _right.x * currShoulder,
+    _pivot.y - _fwd.y * camBoom + 0.32,
+    _pivot.z - _fwd.z * camBoom + _right.z * currShoulder);
   camera.position.copy(_desired);
-  camera.lookAt(_pivot.x + _fwd.x * 2.2, _pivot.y + _fwd.y * 2.2 + 0.1, _pivot.z + _fwd.z * 2.2);
+  camera.lookAt(
+    _pivot.x + _fwd.x * aimDist + _right.x * (currShoulder * 0.15),
+    _pivot.y + _fwd.y * aimDist + 0.32,
+    _pivot.z + _fwd.z * aimDist + _right.z * (currShoulder * 0.15));
   camera.rotateZ(player.roll * 0.6);
 }
 
@@ -871,11 +1000,19 @@ function frame() {
   const hs = Math.hypot(player.vel.x, player.vel.z);
   const facing = viewMode === 'first' ? player.yaw : actions.faceYaw;
   const wantYaw = facing ?? (hs > 0.25 ? Math.atan2(player.vel.x, player.vel.z) : player.yaw);
-  let d = (wantYaw - bodyYaw) % (Math.PI * 2);
-  if (d > Math.PI) d -= Math.PI * 2; if (d < -Math.PI) d += Math.PI * 2;
-  bodyYaw += d * Math.min(1, dt * (facing != null ? 10 : hs > 0.25 ? 7 : 3));
+  if (viewMode === 'first') {
+    bodyYaw = player.yaw;
+  } else {
+    let d = (wantYaw - bodyYaw) % (Math.PI * 2);
+    if (d > Math.PI) d -= Math.PI * 2; if (d < -Math.PI) d += Math.PI * 2;
+    bodyYaw += d * Math.min(1, dt * (facing != null ? 10 : hs > 0.25 ? 7 : 3));
+  }
 
   _body.yaw = bodyYaw; _body.aimYaw = player.yaw;
+  _body.pitch = player.pitch;
+  _body.isFirstPerson = (viewMode === 'first');
+  _body.operating = !!(survival && survival.job);
+  _body.candidateNear = !!(actions.candidate || (survival && survival.prompt));
   actions.update(dt, _body);
   // Stepping in to pick something up: short, slow paces the gait can follow.
   if (actions.stepTo && player.onGround) {
@@ -887,8 +1024,8 @@ function frame() {
 
   astronaut.root.position.set(player.pos.x, player.pos.y, player.pos.z);
   astronaut.root.rotation.y = bodyYaw;
-  // Nobody sees the crew body in first person or survey mode; skip the skinning.
-  if (viewMode === 'third' && player.mode !== 'fly')
+  // Animate the crew body and hands on foot in both first and third person
+  if (player.mode !== 'fly')
     astronaut.animate(dt, player.gaitPhase, player.speed01, !player.onGround, player.lean, actions.pose);
 
   const gy = hf.heightAt(player.pos.x, player.pos.z);
@@ -1053,6 +1190,7 @@ function updateHUD() {
     el('hudMarsSub').textContent =
       `LMST · Ls ${st.ls.toFixed(1)}° ${season(st.ls)} · MY${st.marsYear} · SUN ${st.elevation.toFixed(1)}°`;
   }
+
 
   let best = null, bd = Infinity;
   for (const f of waypoints) {
