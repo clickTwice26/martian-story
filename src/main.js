@@ -415,6 +415,12 @@ async function boot() {
   el('rdCloseBtn')?.addEventListener('click', () => closeRoverData());
 
   el('startBtn').addEventListener('click', beginPlay);
+  // ?tour: automatic camera tour for recording the demo video (src/tour.js)
+  if (new URLSearchParams(location.search).has('tour'))
+    el('startBtn').addEventListener('click', () => {
+      window.__tourActive = true;                        // no pause menu or click-to-continue screens from here on
+      import('./tour.js').then(t => t.runTour(window.__mars));
+    }, { once: true });
   renderer.domElement.addEventListener('click', () => {
     if (!settingsOpen && input.mode !== 'locked') beginPlay();
   });
@@ -633,7 +639,7 @@ function paintInputBadge() {
 }
 
 function openSettings() {
-  if (!settingsUI) return;
+  if (!settingsUI || window.__tourActive) return;     // the recorded tour never pauses
   settingsOpen = true;
   input.enabled = false;
   input.clearKeys();
@@ -832,7 +838,7 @@ function introDone(skipped) {
   companion._setMode('roam');
   if (survival) survival.begin();
   else if (skipped) companion.say?.('Kestrel is gone, Commander. Perseverance\u2019s tracks are close \u2014 follow me.', 6000);
-  if (input.mode !== 'locked') {
+  if (input.mode !== 'locked' && !window.__tourActive) {
     el('startBtn').textContent = 'CLICK TO EXPLORE';
     el('startHint').textContent = 'Mouse look needs pointer lock. If your browser refuses it, hold the left mouse button and drag to look instead \u2014 both work.';
     el('startOverlay').classList.remove('hidden');

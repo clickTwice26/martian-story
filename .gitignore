@@ -10,3 +10,8 @@
 .DS_Store
 *.swp
 node_modules/
+
+# Video work: screen recordings and rendered demo videos stay local (GBs).
+/video/*.mov
+/video/*.mp4
+/tour_frames/
