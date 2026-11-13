@@ -1266,12 +1266,23 @@ export class Survival {
     const end = document.createElement('div');
     end.id = 'svEnd';
     document.body.appendChild(end);
+    const ICON = {
+      suit: '<circle cx="12" cy="11" r="8"/><path d="M7.5 11a4.5 3.5 0 0 1 9 0v1h-9z"/><path d="M8 19v2h8v-2"/>',
+      hab: '<path d="M3 19h18M5 19v-4a7 7 0 0 1 14 0v4"/><path d="M10 19v-3h4v3"/>',
+      power: '<path d="M13 2L4 14h7l-1 8 9-12h-7z"/>',
+      water: '<path d="M12 3s6 7 6 11a6 6 0 0 1-12 0c0-4 6-11 6-11z"/>',
+      food: '<path d="M12 21v-9"/><path d="M12 12c0-5 4-8 8-8 0 5-3 8-8 8z"/><path d="M12 15c0-4-3-6-7-6 0 4 3 6 7 6z"/>',
+      dose: '<circle cx="12" cy="12" r="1.8"/><path d="M10.5 9.4L7.6 4.3a8.5 8.5 0 0 1 8.8 0l-2.9 5.1"/><path d="M15 12h5.9a8.5 8.5 0 0 1-4.4 7.6l-2.9-5.1"/><path d="M10.4 14.5l-2.9 5.1A8.5 8.5 0 0 1 3.1 12H9"/>',
+      air: '<path d="M10 14V5a2 2 0 0 1 4 0v9a4 4 0 1 1-4 0z"/><path d="M12 9v8"/>',
+      prop: '<path d="M12 2c3 3 4 7 4 11l-2 3h-4l-2-3c0-4 1-8 4-11z"/><path d="M10 19l2 3 2-3"/><circle cx="12" cy="10" r="1.5"/>',
+    };
     const rows = [
-      ['suit', 'SUIT O₂'], ['hab', 'HAB O₂'], ['power', 'POWER'], ['water', 'WATER'], ['food', 'FOOD'],
-      ['dose', 'DOSE'], ['air', 'OUTSIDE'], ['prop', 'PROPELLANT'],
+      ['suit', 'SUIT AIR'], ['hab', 'HAB AIR'], ['power', 'POWER'], ['water', 'WATER'], ['food', 'FOOD'],
+      ['dose', 'RADIATION'], ['air', 'OUTSIDE'], ['prop', 'FUEL'],
     ];
     el('svRows').innerHTML = rows.map(([k, n]) =>
-      `<div class="svRow" id="svR_${k}"><span>${n}</span><b></b><i><u></u></i></div>`).join('');
+      `<div class="svRow" id="svR_${k}"><span class="ic"><svg viewBox="0 0 24 24">${ICON[k]}</svg></span>` +
+      `<span class="tx"><b></b><span>${n}</span></span></div>`).join('');
     this.hud = { root, rows: Object.fromEntries(rows.map(([k]) => [k, el('svR_' + k)])) };
     addEventListener('keydown', e => {
       if (!this.journalOpen) return;
@@ -1290,9 +1301,13 @@ export class Survival {
   _setRow(k, text, frac, level = '') {
     const r = this.hud.rows[k];
     if (!r) return;
-    const b = r.children[1], u = r.children[2].firstChild;
-    if (b.textContent !== text) b.textContent = text;
-    u.style.width = (clamp(frac, 0, 1) * 100).toFixed(1) + '%';
+    // The tile shows the headline value; the full reading is on hover.
+    let short = text.split(' · ')[0];
+    if (short.includes(' / ')) { const [v, rest] = short.split(' / '); short = `${v} ${rest.split(' ').pop()}`; }
+    short = short.replace(/(\d{3,})\.\d+/, '$1');          // 390.4 mSv -> 390 mSv
+    const b = r.querySelector('b');
+    if (b.textContent !== short) { b.textContent = short; r.title = `${r.querySelector('.tx span').textContent}: ${text}`; }
+    r.firstChild.style.setProperty('--p', clamp(frac, 0, 1).toFixed(3));
     r.className = 'svRow ' + level;
   }
 
@@ -1371,6 +1386,13 @@ export class Survival {
     if (!li) return;
     const [v, max, unit] = o.progress(this);
     li.textContent = `${Math.min(v, max).toFixed(max >= 50 || unit === '%' ? 0 : 1)}/${max} ${unit}`;
+  }
+
+  /** World point of the current objective, for the minimap; null when there is none. */
+  objectivePoint() {
+    const o = MISSIONS[this.m]?.objectives[this.step];
+    if (!o || !o.at || this.ending || this.wake) return null;
+    return this.pt(typeof o.at === 'function' ? o.at(this) : o.at) || null;
   }
 
   _marker(cam) {

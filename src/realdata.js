@@ -80,6 +80,7 @@ export async function loadSurfaceData(terrain, baseMeta) {
       nearMeta.widthMetres / mpp, 0);
     u.uAlbedoOn.value = 1;
     out.albedo = true;
+    out.albedoImage = img;            // the minimap draws from it too
   } catch (e) { console.warn('[realdata] HiRISE albedo unavailable:', e.message); }
 
   try {

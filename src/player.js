@@ -48,12 +48,14 @@ export const SETTINGS = {
   },
   move: {
     frictionCoef: 0.55,      // boot on regolith
-    walkSpeed: 1.35,         // suited crews manage ~1 m/s; Apollo lope was faster
-    runSpeed: 3.05,
+    // Temporarily boosted for faster exploration (realistic: walk 1.35, run 3.05,
+    // strides 0.72 / 1.18 - suited crews manage ~1 m/s; Apollo lope was faster).
+    walkSpeed: 3.2,
+    runSpeed: 6.5,
     jumpSpeed: 3.4,
     airControl: 0.045,       // there is nothing to push against
-    stepLengthWalk: 0.72,
-    stepLengthRun: 1.18,
+    stepLengthWalk: 1.05,
+    stepLengthRun: 1.75,
   },
 };
 

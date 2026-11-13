@@ -16,6 +16,7 @@ import { CharacterActions, LIFT_MAX } from './actions.js';
 import { Interactables, PropSet, RockSource } from './interact.js';
 import { Intro, WreckSite, crashLayout, INTRO_LMST } from './intro/intro.js';
 import { Survival } from './survival/survival.js';
+import { Minimap } from './minimap.js';
 import { loadSurfaceData, loadFarTerrain, loadFarSource, fillGapsFromFar, MarsWeather, RoverMedia, K_TO_C } from './realdata.js';
 import { siteTime, missionSol, season, formatSolClock, sunDirection,
          utcForSolAndLmst, JEZERO, SOL_SECONDS } from './marstime.js';
@@ -144,6 +145,7 @@ let survival = null, survivalModal = false;
 /* Free NASA/USGS layers (see realdata.js); each stays null if its file is missing. */
 let farTerrain = null, minerals = null, weather = null, media = null, weatherNow = null;
 let roverDataOpen = false;
+let minimap = null, travData = null;
 const SPAWN = { x: 0, z: 0, yaw: 2.3 };
 /* Shared with the overlay materials so the rover track bends with the ground
    instead of floating off it at range. */
@@ -188,6 +190,7 @@ async function boot() {
     fetch('data/jezero_base.json').then(r => r.json()),
   ]);
   waypoints = wp.features;
+  travData = trav;
 
   const p0 = waypoints[0].properties;
   const [aCol, aRow] = makeProjector(meta, 0, 0).lonLatToTexel(p0.lon, p0.lat);
@@ -232,6 +235,7 @@ async function boot() {
     RoverMedia.load(projector).catch(e => { console.warn('[realdata] rover media unavailable:', e.message); return null; }),
   ]);
   minerals = surf.minerals; weather = wx; media = med;
+  minimap = new Minimap(el('minimap'), { hf, projector, traverse: travData, albedo: surf.albedoImage });
   if (far) { farTerrain = far; scene.add(far); }
   bar(0.93);
 
@@ -1175,6 +1179,7 @@ function frame() {
   if (intro) intro.updateAfter(dt);
   updateCompanionBubble();
   updateActionHUD();
+  updateMinimap(rawDt);
   sky.position.copy(camera.position);
   sky.scale.setScalar(camera.far * 0.45);
   if (camera.fov !== SETTINGS.view.fov) { camera.fov = SETTINGS.view.fov; camera.updateProjectionMatrix(); }
@@ -1182,9 +1187,12 @@ function frame() {
   terrain.update(camera);
   _viewFrustum.setFromProjectionMatrix(_viewProj.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse));
   lightCache.update(camera.position, SUN_DIR);
+  // Before the draw, never after: a pixel-ratio change resizes (and so clears)
+  // the canvas, and doing it after render() presents that blank canvas as a
+  // full-screen flash.
+  adaptResolution(rawDt);
   renderer.render(scene, camera);
 
-  adaptResolution(rawDt);
   frames++; fpsT += rawDt;           // the clamped dt would floor the readout at 20 fps
   if (fpsT > 0.35) { fps = frames / fpsT; frames = 0; fpsT = 0; updateHUD(); }
 }
@@ -1223,7 +1231,8 @@ function companionAnimRate() {
  * automatically - at a 60 Hz cap there is never the headroom to prove the
  * denser mesh would fit - but choosing a mesh or preset in Settings restores it.
  */
-const dynRes = { t: 0, n: 0, warm: 3, MIN: 0.5, LOD_MIN: 0.6, pinned: 0 };
+const dynRes = { t: 0, n: 0, warm: 3, MIN: 0.5, LOD_MIN: 0.6, pinned: 0,
+                 slow: 0, fast: 0, since: 0, lastDir: 0, ceil: 9, ceilT: 0 };
 function stepMeshDown() {
   const lower = Object.values(GRID_OPTIONS).filter(g => g < terrain.grid);
   if (!lower.length) return;
@@ -1236,8 +1245,13 @@ function adaptResolution(frameDt) {
   if (dynRes.t < 0.75) return;
   const fps = dynRes.n / dynRes.t;
   dynRes.t = 0; dynRes.n = 0;
+  dynRes.since += 0.75;
+  if ((dynRes.ceilT -= 0.75) <= 0) dynRes.ceil = 9;
   if ((dynRes.warm -= 0.75) > 0) return;     // shader compiles and first bakes are not the steady state
   let nextRes = res.dyn, nextLod = res.lod;
+  const target0 = settings.get('targetFps');
+  dynRes.slow = fps < target0 * 0.88 ? dynRes.slow + 1 : 0;
+  dynRes.fast = fps > target0 * 0.96 ? dynRes.fast + 1 : 0;
   if (!settings.get('adaptiveRes')) { nextRes = 1; nextLod = 1; }
   else if (!settingsOpen) {
     const target = settings.get('targetFps');
@@ -1257,10 +1271,41 @@ function adaptResolution(frameDt) {
   // Snap to 5% steps: every pixel-ratio change reallocates the framebuffer,
   // itself a hitch, so it must not twitch by fractions of a percent.
   nextRes = nextRes >= 1 ? 1 : Math.max(dynRes.MIN, Math.round(nextRes * 20) / 20);
+  // Hysteresis: resolution only drops after 1.5 s of slow frames, only rises
+  // after 6 s of headroom, and never reverses direction within 20 s, so a
+  // frame rate hovering near the target cannot make it bounce. Terrain LOD
+  // (invisible to change) still tracks every window.
+  if (settings.get('adaptiveRes') && nextRes !== res.dyn) {
+    const dir = nextRes < res.dyn ? -1 : 1;
+    const ok = dir < 0 ? dynRes.slow >= 2 && dynRes.since >= 3
+                       : dynRes.fast >= 8 && dynRes.since >= (dynRes.lastDir < 0 ? 20 : 8) && nextRes < dynRes.ceil;
+    if (!ok) nextRes = res.dyn;
+    else {
+      // a level we just rose to and could not hold is not retried for a minute
+      if (dir < 0 && dynRes.lastDir > 0 && dynRes.since < 20) { dynRes.ceil = res.dyn; dynRes.ceilT = 60; }
+      dynRes.since = 0; dynRes.lastDir = dir;
+    }
+  }
   if (nextRes !== res.dyn) { res.dyn = nextRes; applyPixelRatio(); }
   res.lod = nextLod;
   terrain.lodScale = nextLod;
   lightCache.budgetScale = res.dyn < 0.995 || res.lod < 0.995 ? 0.25 : 1;
+}
+
+const _mmFwd = new THREE.Vector3();
+function updateMinimap(dt) {
+  if (!minimap || !player) return;
+  player.forward(_mmFwd);
+  const marks = [];
+  if (companion && companion.root.visible) marks.push({ x: companion.pos.x, z: companion.pos.z, kind: 'k7' });
+  if (perseverance && perseverance.root.visible) marks.push({ x: perseverance.pos.x, z: perseverance.pos.z, kind: 'rover' });
+  if (crash) marks.push({ x: crash.W.x, z: crash.W.z, kind: 'wreck' });
+  const goal = survival && survival.running ? survival.objectivePoint() : null;
+  if (goal) marks.push({ x: goal.x, z: goal.z, kind: 'goal' });
+  minimap.update(dt, { x: player.pos.x, z: player.pos.z, fx: _mmFwd.x, fz: _mmFwd.z }, marks);
+  const r = minimap.radius, z = el('mmZoom');
+  const label = r >= 1000 ? `${(r / 1000).toFixed(1)} km` : `${r} m`;
+  if (z.textContent !== label) z.textContent = label;
 }
 
 const _proj = new THREE.Vector3();
@@ -1284,11 +1329,11 @@ function updateCompanionBubble() {
 
 function updateHUD() {
   const [lon, lat] = projector.worldToLonLat(player.pos.x, player.pos.z);
-  el('hudLon').textContent = lon.toFixed(5) + '°E';
-  el('hudLat').textContent = lat.toFixed(5) + '°N';
-  el('hudElev').textContent = player.pos.y.toFixed(1) + ' m';
+  el('hudLon').textContent = lon.toFixed(4) + '°E';
+  el('hudLat').textContent = lat.toFixed(4) + '°N';
+  el('hudElev').textContent = player.pos.y.toFixed(0) + 'm';
   el('hudSlope').textContent = player.slope.toFixed(1) + '°';
-  el('hudSpeed').textContent = Math.hypot(player.vel.x, player.vel.z).toFixed(2) + ' m/s';
+  el('hudSpeed').textContent = Math.hypot(player.vel.x, player.vel.z).toFixed(1) + 'm/s';
   el('hudMode').textContent = player.mode === 'walk'
     ? (viewMode === 'third' ? 'EVA · 3RD' : 'EVA · 1ST') : 'SURVEY';
   el('hudFps').textContent = fps.toFixed(0);

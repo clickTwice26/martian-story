@@ -175,12 +175,25 @@
     letter-spacing:.02em;font-variant-numeric:tabular-nums;text-shadow:0 0 8px rgba(255,255,255,.12)}
   #hudTerrain{color:#34d399!important;font-weight:700;text-shadow:0 0 10px rgba(52,211,153,.5)!important}
 
-  #navPanel{top:16px;left:18px;min-width:236px}
+  #navPanel{top:16px;left:18px;width:230px;padding:10px 10px 9px}
+  #navPanel .mm-wrap{position:relative;width:190px;height:190px;margin:0 auto}
+  #minimap{width:190px;height:190px;display:block;border-radius:50%;cursor:zoom-in;
+    box-shadow:0 0 0 1px rgba(56,189,248,.35),0 6px 22px rgba(0,0,0,.55)}
+  #navPanel .mm-zoom{position:absolute;right:2px;top:4px;font:600 9.5px "Share Tech Mono",monospace;color:#cbd5e1;
+    background:rgba(2,6,12,.7);padding:2px 6px;border-radius:9px;pointer-events:none}
+  #navPanel .mm-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:4px;margin-top:9px}
+  #navPanel .mm-stats div{display:flex;align-items:center;gap:3px;justify-content:center;min-width:0;padding:5px 2px!important;background:rgba(15,23,42,.55);
+    border:1px solid rgba(56,189,248,.14);border-radius:7px;padding:5px 4px}
+  #navPanel .mm-stats svg{width:12px;height:12px;flex:none;fill:none;stroke:#7dd3fc;stroke-width:2;stroke-linejoin:round;stroke-linecap:round}
+  #navPanel .mm-stats b{font:600 10.5px "Share Tech Mono",monospace;color:#f8fafc;white-space:nowrap;overflow:hidden;text-overflow:clip}
+  #navPanel .mm-sub{margin-top:6px;text-align:center;font:500 9.5px "Share Tech Mono",monospace;color:#94a3b8;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  #navPanel .mm-sub #hudTerrain{font-weight:700}
   #perfPanel{top:16px;right:18px;min-width:196px}
   #solPanel{bottom:44px;left:18px;min-width:240px;max-width:44vw}
-  #envPanel{bottom:150px;left:18px;min-width:236px}
-  body.story #envPanel{left:auto;right:18px;bottom:44px}
-  @media (max-width:880px){#envPanel{left:auto;right:18px;bottom:44px}}
+  #envPanel{top:232px;right:18px}
+  body.story #envPanel{top:auto;right:18px;bottom:44px}
+  @media (max-width:880px){#envPanel{top:auto;right:18px;bottom:44px}}
   #solPanel .big{font-family:"Orbitron",sans-serif;font-size:14px;font-weight:700;color:#38bdf8;letter-spacing:.12em;margin-bottom:4px}
 
   #keysPanel{bottom:44px;right:18px;color:#94a3b8;line-height:1.95;text-align:right;max-width:min(340px,44vw);
@@ -369,7 +382,7 @@
   body.svCine #hud{display:none}
 
   /* Mission Directive Card */
-  #svMission{top:210px;left:18px;width:min(350px,42vw);border-top:2px solid #f97316}
+  #svMission{top:300px;left:18px;width:min(350px,42vw);border-top:2px solid #f97316}
   #svMission h3{justify-content:space-between;color:#fdba74}
   #svAct{letter-spacing:.18em}
   #svScore{font-family:"Share Tech Mono",monospace;color:#f59e0b;letter-spacing:.08em;font-size:11px}
@@ -394,26 +407,31 @@
   #svLife{top:16px;right:18px;width:min(320px,36vw);border-top:2px solid #38bdf8}
   #svLife h3{justify-content:space-between}
   #svSol{font-family:"Share Tech Mono",monospace;font-size:11px;letter-spacing:.1em;color:#38bdf8;text-shadow:0 0 8px rgba(56,189,248,.4)}
-  .svRow{display:grid;grid-template-columns:82px 1fr;column-gap:8px;align-items:center;line-height:1.35;
-    padding:4px 0;border-bottom:1px solid rgba(255,255,255,.03)}
-  .svRow:last-child{border-bottom:none}
-  .svRow span{font-family:"Orbitron",sans-serif;font-size:8.5px;font-weight:700;letter-spacing:.14em;color:#94a3b8}
-  .svRow b{font-family:"Share Tech Mono",monospace;font-size:11.5px;font-weight:600;color:#f1f5f9;
-    text-align:right;letter-spacing:.04em;font-variant-numeric:tabular-nums;white-space:nowrap}
-  .svRow i{grid-column:1/3;height:4px;background:rgba(15,23,42,.8);border:1px solid rgba(255,255,255,.06);
-    border-radius:2px;margin-top:3px;overflow:hidden;position:relative;box-shadow:inset 0 1px 3px rgba(0,0,0,.6)}
-  .svRow i::after{content:"";position:absolute;inset:0;
-    background-image:repeating-linear-gradient(90deg,transparent,transparent 8px,rgba(0,0,0,.45) 8px,rgba(0,0,0,.45) 9px);
-    pointer-events:none}
-  .svRow u{display:block;height:100%;background:linear-gradient(90deg,#0ea5e9,#10b981);box-shadow:0 0 8px rgba(16,185,129,.5);
-    border-radius:1px;transition:width .35s cubic-bezier(.4,0,.2,1)}
-  .svRow.warn b{color:#fbbf24;text-shadow:0 0 10px rgba(251,191,36,.4)}
-  .svRow.warn u{background:linear-gradient(90deg,#f59e0b,#fbbf24);box-shadow:0 0 10px rgba(245,158,11,.6)}
-  .svRow.crit b{color:#f87171;text-shadow:0 0 12px rgba(248,113,113,.6);animation:svBlink .65s steps(2) infinite}
-  .svRow.crit u{background:linear-gradient(90deg,#dc2626,#ef4444);box-shadow:0 0 12px rgba(239,68,68,.8);
-    animation:svCritPulse 1s ease-in-out infinite alternate}
-  @keyframes svCritPulse{from{filter:brightness(1)}to{filter:brightness(1.4)}}
-  .svRow.off{opacity:.32}
+  #svLife{width:min(340px,40vw)}
+  @media (max-width:1000px){#svLife{width:300px}#svRows{gap:5px}.svRow{padding:6px;gap:7px}.svRow .ic{width:36px;height:36px}}
+  #svRows{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}
+  .svRow{display:flex;align-items:center;gap:9px;padding:7px 8px;border-radius:11px;min-width:0;
+    background:rgba(15,23,42,.55);border:1px solid rgba(56,189,248,.12);transition:border-color .3s,background .3s}
+  .svRow .ic{--p:0;--c:#22d3ee;position:relative;width:40px;height:40px;flex:none;border-radius:50%;display:grid;place-items:center;
+    background:conic-gradient(var(--c) calc(var(--p) * 1turn),rgba(255,255,255,.09) 0);transition:--p .4s}
+  .svRow .ic::before{content:"";position:absolute;inset:3.5px;border-radius:50%;background:#0a111d}
+  .svRow .ic svg{position:relative;width:21px;height:21px;fill:none;stroke:var(--c);stroke-width:1.9;
+    stroke-linecap:round;stroke-linejoin:round;filter:drop-shadow(0 0 4px color-mix(in srgb,var(--c) 55%,transparent))}
+  .svRow .tx{display:flex;flex-direction:column;min-width:0;line-height:1.15}
+  .svRow b{font:700 13.5px "Share Tech Mono",monospace;color:#f8fafc;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+    font-variant-numeric:tabular-nums}
+  .svRow .tx span{font:700 8px "Orbitron",sans-serif;letter-spacing:.14em;color:#94a3b8;margin-top:3px;white-space:nowrap}
+  #svR_suit .ic{--c:#22d3ee} #svR_hab .ic{--c:#38bdf8} #svR_power .ic{--c:#facc15} #svR_water .ic{--c:#60a5fa}
+  #svR_food .ic{--c:#4ade80} #svR_dose .ic{--c:#c084fc} #svR_air .ic{--c:#fb923c} #svR_prop .ic{--c:#f472b6}
+  #svRows .svRow.warn .ic{--c:#f59e0b}
+  #svRows .svRow.warn{border-color:rgba(245,158,11,.45);background:rgba(69,39,6,.45)}
+  #svRows .svRow.warn b{color:#fbbf24}
+  #svRows .svRow.crit .ic{--c:#ef4444}
+  #svRows .svRow.crit{border-color:rgba(239,68,68,.7);background:rgba(80,10,10,.5);animation:svTilePulse .9s ease-in-out infinite alternate}
+  #svRows .svRow.crit b{color:#fca5a5}
+  @keyframes svTilePulse{from{box-shadow:0 0 0 rgba(239,68,68,0)}to{box-shadow:0 0 14px rgba(239,68,68,.55)}}
+  #svRows .svRow.off{opacity:.33}
+  #svRows .svRow.off .ic{--p:0}
   @keyframes svBlink{50%{opacity:.35}}
 
   /* AR Waypoint Marker */
@@ -576,7 +594,20 @@
   #roverDataModal .rd-bar i{height:7px;border-radius:4px;background:linear-gradient(90deg,var(--c) var(--v),rgba(255,255,255,.08) var(--v))}
   #roverDataModal .rd-bar b{font-family:"Share Tech Mono",monospace;color:#fed7aa;font-weight:400;text-align:right}
   @media (max-width:760px){#roverDataModal .p-body{flex-direction:column;overflow-y:auto}#roverDataModal .rd-photos{grid-template-columns:1fr}}
-  #envPanel .hint span{color:#94a3b8;font-size:10px}
+  #envPanel{width:236px}
+  #envPanel .env-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+  #envPanel .env-grid div{display:grid;grid-template-columns:20px 1fr;grid-template-rows:auto auto;column-gap:7px;align-items:center;
+    padding:6px 8px;border-radius:9px;background:rgba(15,23,42,.55);border:1px solid rgba(251,146,60,.16)}
+  #envPanel svg{width:20px;height:20px;grid-row:1/3;fill:none;stroke:#fb923c;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
+  #envPanel .env-grid b{font:700 13px "Share Tech Mono",monospace;color:#f8fafc;white-space:nowrap}
+  #envPanel .env-grid span{font:700 7.5px "Orbitron",sans-serif;letter-spacing:.14em;color:#94a3b8}
+  #envPanel .env-min{display:flex;align-items:center;gap:8px;margin-top:6px;padding:6px 8px;border-radius:9px;
+    background:rgba(15,23,42,.55);border:1px solid rgba(52,211,153,.2)}
+  #envPanel .env-min svg{stroke:#34d399}
+  #envPanel .env-min b{font:600 11.5px "Rajdhani",sans-serif;color:#d1fae5;letter-spacing:.02em}
+  #envPanel .env-keys{margin-top:7px;font-size:10px;color:#94a3b8;text-align:center}
+  #envPanel kbd{font:700 9.5px "Share Tech Mono",monospace;color:#7dd3fc;background:rgba(56,189,248,.12);
+    border:1px solid rgba(56,189,248,.35);border-radius:4px;padding:1px 5px;margin:0 2px}
   #roverDataModal .p-body{overflow-y:auto}
   #roverDataModal .p-col{min-height:min-content}
   #perseveranceModal .p-panel,#roverDataModal .p-panel{width:min(1060px,95vw);height:min(730px,92vh);display:flex;flex-direction:column;
@@ -617,7 +648,7 @@
   #perseveranceModal .p-source a:hover,#roverDataModal .p-source a:hover{text-decoration:underline}
 
   @media (max-width:1250px){
-    #svMission{top:190px}
+    #svMission{top:290px}
     #svFact{top:300px}
   }
   @media (max-width:880px){
@@ -678,14 +709,14 @@
 
 <div id="hud">
   <div class="panel" id="navPanel">
-    <h3>POSITION</h3>
-    <div class="row"><span>LON</span><span id="hudLon">—</span></div>
-    <div class="row"><span>LAT</span><span id="hudLat">—</span></div>
-    <div class="row"><span>ELEVATION</span><span id="hudElev">—</span></div>
-    <div class="row"><span>SLOPE</span><span id="hudSlope">—</span></div>
-    <div class="row"><span>SPEED</span><span id="hudSpeed">—</span></div>
-    <div class="row"><span>MODE</span><span id="hudMode">—</span></div>
-    <div class="row"><span>TERRAIN</span><span id="hudTerrain">—</span></div>
+    <div class="mm-wrap"><canvas id="minimap" width="380" height="380"></canvas>
+      <span class="mm-zoom" id="mmZoom">300 m</span></div>
+    <div class="mm-stats">
+      <div title="Elevation above the MOLA areoid"><svg viewBox="0 0 24 24"><path d="M3 20l6-10 4 6 3-4 5 8z"/></svg><b id="hudElev">—</b></div>
+      <div title="Ground slope"><svg viewBox="0 0 24 24"><path d="M3 20h18L3 8z"/></svg><b id="hudSlope">—</b></div>
+      <div title="Speed"><svg viewBox="0 0 24 24"><path d="M4 16a8 8 0 1 1 16 0M12 16l4-5"/></svg><b id="hudSpeed">—</b></div>
+    </div>
+    <div class="mm-sub"><span id="hudLat">—</span> <span id="hudLon">—</span> · <span id="hudMode">—</span> · <span id="hudTerrain">—</span></div>
   </div>
 
   <div class="panel" id="marsPanel">
@@ -695,13 +726,15 @@
   </div>
 
   <div class="panel" id="envPanel" style="display:none">
-    <h3>ENVIRONMENT · MEDA / CRISM</h3>
-    <div class="row"><span>AIR</span><span id="hudAir">—</span></div>
-    <div class="row"><span>GROUND</span><span id="hudGround">—</span></div>
-    <div class="row"><span>PRESSURE</span><span id="hudPress">—</span></div>
-    <div class="row"><span>WIND</span><span id="hudWind">—</span></div>
-    <div class="row"><span>SPECTRA</span><span id="hudMineral">—</span></div>
-    <div class="row hint"><span><b>K</b> mineral map · <b>P</b> rover data here</span></div>
+    <h3>OUTSIDE · LIVE NASA DATA</h3>
+    <div class="env-grid">
+      <div title="Air temperature (MEDA)"><svg viewBox="0 0 24 24"><path d="M10 14V5a2 2 0 0 1 4 0v9a4 4 0 1 1-4 0z"/><path d="M12 9v8"/></svg><b id="hudAir">—</b><span>AIR</span></div>
+      <div title="Ground temperature (MEDA)"><svg viewBox="0 0 24 24"><path d="M3 19h18"/><path d="M6 15h12M9 11h6"/></svg><b id="hudGround">—</b><span>GROUND</span></div>
+      <div title="Atmospheric pressure (MEDA)"><svg viewBox="0 0 24 24"><circle cx="12" cy="13" r="8"/><path d="M12 13l4-4"/></svg><b id="hudPress">—</b><span>PRESSURE</span></div>
+      <div title="Wind (MEDA)"><svg viewBox="0 0 24 24"><path d="M3 9h11a3 3 0 1 0-3-3M3 15h15a3 3 0 1 1-3 3"/></svg><b id="hudWind">—</b><span>WIND</span></div>
+    </div>
+    <div class="env-min" title="CRISM orbital spectroscopy at your feet"><svg viewBox="0 0 24 24"><path d="M12 3l7 6-7 12L5 9z"/><path d="M5 9h14"/></svg><b id="hudMineral">—</b></div>
+    <div class="env-keys"><kbd>K</kbd> mineral map <kbd>P</kbd> rover data here</div>
   </div>
 
   <div class="panel" id="perfPanel">
